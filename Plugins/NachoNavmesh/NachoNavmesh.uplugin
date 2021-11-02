@@ -1,0 +1,27 @@
+﻿{
+  "FileVersion": 1,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "NachoNavmesh",
+  "Description": "Custom implementation of a navigation mesh",
+  "Category": "Other",
+  "CreatedBy": "Ignacio de la Vega",
+  "CreatedByURL": "",
+  "DocsURL": "",
+  "MarketplaceURL": "",
+  "SupportURL": "",
+  "CanContainContent": true,
+  "IsBetaVersion": false,
+  "IsExperimentalVersion": false,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "NachoNavmesh",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+
+  ]
+}
