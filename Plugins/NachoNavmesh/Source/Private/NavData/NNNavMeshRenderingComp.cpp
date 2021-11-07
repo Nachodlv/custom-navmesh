@@ -73,12 +73,39 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 		{
 			const TArray<float>& Coords = GeometryToDraw.GeomCoords;
 			const int32 Geometries = GeometryToDraw.GeomCoords.Num() / 3;
+			const int32 Indices = GeometryToDraw.GeomIndices.Num() / 3;
+
+			// Gather vertices
 			for (int32 i = 0; i < Geometries; ++i)
 			{
-				FVector Position (-Coords[i * 3], -Coords[i * 3 + 2], Coords[i * 3 + 1]);
+				FVector Position = GeometryToDraw.GetGeometryPosition(i);
 				FDebugPoint Point (Position, FColor::Green, 10.0f);
 				AuxPoints.Add(MoveTemp(Point));
 			}
+
+			// Gather polygons
+			const FColor PolygonColor = FColor::Blue;
+			constexpr float PolygonThickness = 2.0f;
+			for (int32 i = 0; i < Indices; ++i)
+			{
+				FVector FirstPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3]);
+				FVector SecondPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3 + 1]);
+				FVector ThirdPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3 + 2]);
+				FDebugRenderSceneProxy::FDebugLine FirstLine (FirstPoint, SecondPoint, PolygonColor, PolygonThickness);
+				FDebugRenderSceneProxy::FDebugLine SecondLine (SecondPoint, ThirdPoint, PolygonColor, PolygonThickness);
+				FDebugRenderSceneProxy::FDebugLine ThirdLine (ThirdPoint, FirstPoint, PolygonColor, PolygonThickness);
+				AuxLines.Add(MoveTemp(FirstLine));
+				AuxLines.Add(MoveTemp(SecondLine));
+				AuxLines.Add(MoveTemp(ThirdLine));
+			}
+		}
+
+		// Gather the HeightField spans
+		const FColor HeightFieldColor = FColor::Red;
+		for (const FBox& HeightField : DebuggingInfo.HeightFields)
+		{
+			FDebugRenderSceneProxy::FDebugBox Box (HeightField, HeightFieldColor);
+			AuxBoxes.Add(MoveTemp(Box));
 		}
 	}
 }
@@ -94,7 +121,7 @@ FNNNavMeshSceneProxy::FNNNavMeshSceneProxy(const UPrimitiveComponent* InComponen
 	  , bRequestedData(false)
 	  , bForceRendering(ForceToRender)
 {
-	DrawType = EDrawType::SolidAndWireMeshes;
+	DrawType = EDrawType::WireMesh;
 
 	if (InProxyData)
 	{
@@ -136,6 +163,17 @@ void FNNNavMeshSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*
 				// if (NNNavMeshRenderingCompHelper::PointInView(Point.Position, View))
 				{
 					PDI->DrawPoint(Point.Position, Point.Color, Point.Size, SDPG_World);
+				}
+			}
+
+			// Draw AuxLine
+			for (int32 Index = 0; Index < ProxyData.AuxLines.Num(); ++Index)
+			{
+				const auto& Line = ProxyData.AuxLines[Index];
+				// TODO (ignacio) here I should check if the point is in view
+				// if (NNNavMeshRenderingCompHelper::PointInView(Point.Position, View))
+				{
+					PDI->DrawLine(Line.Start, Line.End, Line.Color, SDPG_World, Line.Thickness);
 				}
 			}
 		}

@@ -106,6 +106,8 @@ struct FNNNavMeshDebuggingInfo
 {
 	/** The geometry vertices */
 	TArray<FNNRawGeometryElement> RawGeometryToDraw;
+	/** The HeightField spans represented as boxes */
+	TArray<FBox> HeightFields;
 };
 
 class FNNNavMeshDebugDrawHelper : public FDebugDrawDelegateHelper

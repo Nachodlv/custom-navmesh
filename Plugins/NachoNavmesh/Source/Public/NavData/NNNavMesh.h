@@ -6,7 +6,8 @@
 
 #include "NNNavMesh.generated.h"
 
-class FNNNavMeshDebuggingInfo;
+struct FNNNavMeshDebuggingInfo;
+
 class FNNNavMeshGenerator;
 
 UCLASS()

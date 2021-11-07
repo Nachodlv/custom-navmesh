@@ -59,7 +59,7 @@ private:
 	TArray<uint32> DirtyAreas;
 
 	/** The saved data for each area */
-	TMap<uint32, FNNAreaGeneratorData> GeneratorsData;
+	TMap<uint32, FNNAreaGeneratorData*> GeneratorsData;
 
 	/** Used to grow generic element bounds to match this generator's properties
 	 *	(most notably Config.borderSize) */

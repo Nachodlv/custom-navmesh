@@ -13,6 +13,9 @@ struct FNNRawGeometryElement
 	// Per instance transformations in unreal coords
 	// When empty geometry is in world space
 	TArray<FTransform>	PerInstanceTransform;
+
+	/** Returns the geometry position for the given Index */
+	FVector GetGeometryPosition(int32 Index) const;
 };
 
 /** Caches a geometry element */
@@ -42,11 +45,48 @@ struct FNNGeometryCache
 	FNNGeometryCache(const uint8* Memory);
 };
 
+/** Represents a cell that collides with a polygon */
+struct Span
+{
+	Span() {}
+	~Span();
+
+	uint8 MaxSpanHeight = 0;
+	uint8 MinSpanHeight = 0;
+	Span* NextSpan = nullptr;
+	bool bWalkable = false;
+};
+
+/** Container of spans */
+struct HeightField
+{
+	HeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth);
+	~HeightField();
+
+	/** How spans are contained in every axis */
+	int32 UnitsWidth = 0; // X
+	int32 UnitsHeight = 0; // Z
+	int32 UnitsDepth = 0; // Y
+
+	/** Bounds */
+	FVector MinPoint;
+	FVector MaxPoint;
+
+	/** The span size */
+	float CellSize = 0.0f;
+	float CellHeight = 0.0f;
+
+	TArray<Span*> Spans; // 2D array, UnitsWidth * UnitsDepth
+};
+
 /** The result of the FNNAreaGenerator */
 struct FNNAreaGeneratorData
 {
+	~FNNAreaGeneratorData();
 	// tile's geometry: without voxel cache
 	TArray<FNNRawGeometryElement> RawGeometry;
+
+	HeightField* HeightField;
 };
 
 /** Calculates the nav mesh for a specific FNavigationBounds */
@@ -59,7 +99,7 @@ public:
 	void DoWork();
 
 	/** Returns the result of this FNNAreaGenerator */
-	const FNNAreaGeneratorData& GetAreaGeneratorData() const { return AreaGeneratorData; }
+	FNNAreaGeneratorData* GetAreaGeneratorData() const { return AreaGeneratorData; }
 
 protected:
 	/** Gathers the geometry inside the AreaBounds */
@@ -69,6 +109,8 @@ protected:
 	/** Appends specified geometry to the AreaGeneratorData */
 	void AppendGeometry(const FNavigationRelevantData& DataRef, const FCompositeNavModifier& InModifier, const FNavDataPerInstanceTransformDelegate& InTransformsDelegate);
 
+	/** Creates a HeightField with the given parameters */
+	HeightField* InitializeHeightField(const FVector& MinPoint, const FVector& MaxPoint, float CellSize, float CellHeight) const;
 private:
 	/** The bounds assigned to the AreaGenerator */
 	FNavigationBounds AreaBounds;
@@ -78,5 +120,5 @@ private:
 	FNNNavMeshGenerator* ParentGenerator;
 
 	/** The resulting data */
-	FNNAreaGeneratorData AreaGeneratorData;
+	FNNAreaGeneratorData* AreaGeneratorData = nullptr;
 };

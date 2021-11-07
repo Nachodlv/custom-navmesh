@@ -19,7 +19,7 @@ bool FNNNavMeshGenerator::RebuildAll()
 	{
 		DirtyAreas.AddUnique(NavBound.UniqueID);
 	}
-	DirtyAreas.Empty();
+	GeneratorsData.Reset();
 	return true;
 }
 
@@ -46,13 +46,24 @@ void FNNNavMeshGenerator::ProcessDirtyAreas()
 		FNavigationBounds DirtyAreaSearch;
 		DirtyAreaSearch.UniqueID = DirtyAreas[i];
 		const FNavigationBounds* DirtyArea = NavBounds.Find(DirtyAreaSearch);
-		check(DirtyArea);
-		FNNAreaGenerator* AreaGenerator = CreateAreaGenerator(*DirtyArea);
-		AreaGenerator->DoWork();
-		GeneratorsData.Add(DirtyAreas[i], AreaGenerator->GetAreaGeneratorData());
-		delete AreaGenerator;
+		// The area might have been deleted
+		if (DirtyArea)
+		{
+			FNNAreaGenerator* AreaGenerator = CreateAreaGenerator(*DirtyArea);
+			AreaGenerator->DoWork();
+
+			// TODO (ignacio) is it necessary to delete the data if it's going to be overriden?
+			// Does the TMap does this for use?
+			if (FNNAreaGeneratorData** Data = GeneratorsData.Find(DirtyAreas[i]))
+			{
+				delete *Data;
+			}
+			GeneratorsData.Add(DirtyAreas[i], AreaGenerator->GetAreaGeneratorData());
+			delete AreaGenerator;
+		}
 	}
 	Cast<UNNNavMeshRenderingComp>(NavMesh->RenderingComp)->ForceUpdate();
+	DirtyAreas.Reset();
 }
 
 FBox FNNNavMeshGenerator::GrowBoundingBox(const FBox& BBox, bool bUseAgentHeight) const
@@ -70,6 +81,37 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 {
 	for (const auto& Result : GeneratorsData)
 	{
-		DebuggingInfo.RawGeometryToDraw.Append(Result.Value.RawGeometry);
+		DebuggingInfo.RawGeometryToDraw.Append(Result.Value->RawGeometry);
+
+		const TArray<Span*>& Spans = Result.Value->HeightField->Spans;
+
+		// TODO (ignacio) this can be moved to a function
+		FNavigationBounds DataSearch;
+		DataSearch.UniqueID = Result.Key;
+		const FNavigationBounds* GeneratorArea = NavBounds.Find(DataSearch);
+		const FVector BoundMinPoint = GeneratorArea->AreaBox.Min;
+
+		// Converts the HeightField Spans into FBoxes
+		const float CellSize = Result.Value->HeightField->CellSize;
+		const float CellHeight = Result.Value->HeightField->CellHeight;
+		const int32 UnitsWidth = Result.Value->HeightField->UnitsWidth;
+		for (int32 i = 0; i < Spans.Num(); ++i)
+		{
+			const float Y = (i / UnitsWidth) * CellSize;
+			const float X = (i % UnitsWidth) * CellSize;
+			int32 HeightIndex = 0;
+			const Span* CurrentSpan = Spans[i];
+			while (CurrentSpan)
+			{
+				float Z = HeightIndex * CellHeight;
+				FVector MinPoint = BoundMinPoint;
+				MinPoint += FVector(X, Y, Z);
+				FVector MaxPoint = MinPoint + FVector(CellSize, CellSize, CellHeight);
+				DebuggingInfo.HeightFields.Emplace(MinPoint, MaxPoint);
+
+				CurrentSpan = CurrentSpan->NextSpan;
+				++HeightIndex;
+			}
+		}
 	}
 }
