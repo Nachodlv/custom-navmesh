@@ -10,14 +10,11 @@ public class NachoNavmesh : ModuleRules
 
 		PublicIncludePaths.AddRange(
 			new string[] {
-				// ... add public include paths required here ...
 			}
 		);
 
-
 		PrivateIncludePaths.AddRange(
 			new string[] {
-				// ... add other private include paths required here ...
 			}
 		);
 
@@ -25,17 +22,18 @@ public class NachoNavmesh : ModuleRules
 		{
 			"AIModule",
 			"NavigationSystem",
+			"Engine",
+			"Core",
+			"CoreUObject",
+			"InputCore",
+			"Slate",
+			"SlateCore",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			// TODO (Ignacio) we might want to remove some of these, I really don't know which one is necessary
-			"Core",
-			"CoreUObject",
-			"Engine",
-			"InputCore",
-			"Slate",
-			"SlateCore",
+			"RenderCore",
+			"RHI"
 		});
 
 		DynamicallyLoadedModuleNames.AddRange(

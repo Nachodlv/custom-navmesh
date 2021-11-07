@@ -11,3 +11,13 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - Make you AI character inherit from NNCharacter
   - Make your movement component's character AI inherit from NNAvMovementComponent
 
+## TO DO
+- [ ] Voxelization
+  - [X] Gather Geometry
+  - [ ] Footprint the geometry
+  - [ ] Implement heightfields
+  - [ ] Implement open heightfields
+- [ ] Region Generation
+- [ ] Contour Generation
+- [ ] Convex Polygon Generation
+- [ ] Detail Mesh Generation

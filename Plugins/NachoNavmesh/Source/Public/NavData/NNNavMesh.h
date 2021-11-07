@@ -6,10 +6,15 @@
 
 #include "NNNavMesh.generated.h"
 
+class FNNNavMeshDebuggingInfo;
+class FNNNavMeshGenerator;
+
 UCLASS()
 class NACHONAVMESH_API ANNNavMesh : public ANavigationData
 {
 	GENERATED_BODY()
+
+friend FNNNavMeshGenerator;
 
 public:
 	ANNNavMesh();
@@ -30,4 +35,22 @@ public:
 	 * rendering flag of the navigation system is set to dirty
 	 */
 	virtual UPrimitiveComponent* ConstructRenderingComponent() override;
+
+	/** Returns the navigation bounds */
+	const TSet<FNavigationBounds>& GetRegisteredBounds() const;
+
+	/** Fills the debugging info with the nav mesh results */
+	void GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingInfo) const;
+
+	/** Transform the registered bounds to a FBox */
+	FBox GetNavMeshBounds() const;
+
+	/** Whether it should draw the geometry indices */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug")
+	bool bDrawGeometry = true;
+
+private:
+	/** Size of the tallest agent that will path with this navmesh. */
+	UPROPERTY(EditAnywhere, Category = "NN|Config")
+	float AgentHeight;
 };
