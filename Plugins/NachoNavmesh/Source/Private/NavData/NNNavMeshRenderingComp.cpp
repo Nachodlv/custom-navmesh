@@ -3,8 +3,9 @@
 #include "NavData/NNNavMeshRenderingComp.h"
 
 // UE Includes
-#include "Debug/DebugDrawService.h"
 #include "DebugRenderSceneProxy.h"
+#include "Debug/DebugDrawService.h"
+#include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 
 #if WITH_EDITOR
@@ -69,43 +70,62 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 
 	if (NavMesh->bDrawGeometry)
 	{
-		for (const FNNRawGeometryElement& GeometryToDraw : DebuggingInfo.RawGeometryToDraw)
+		bNeedsNewData = false;
+
+		if (NavMesh->bDrawPolygons)
 		{
-			const TArray<float>& Coords = GeometryToDraw.GeomCoords;
-			const int32 Geometries = GeometryToDraw.GeomCoords.Num() / 3;
-			const int32 Indices = GeometryToDraw.GeomIndices.Num() / 3;
-
-			// Gather vertices
-			for (int32 i = 0; i < Geometries; ++i)
+			for (const FNNRawGeometryElement& GeometryToDraw : DebuggingInfo.RawGeometryToDraw)
 			{
-				FVector Position = GeometryToDraw.GetGeometryPosition(i);
-				FDebugPoint Point (Position, FColor::Green, 10.0f);
-				AuxPoints.Add(MoveTemp(Point));
-			}
+				const TArray<float>& Coords = GeometryToDraw.GeomCoords;
+				const int32 Geometries = GeometryToDraw.GeomCoords.Num() / 3;
+				const int32 Indices = GeometryToDraw.GeomIndices.Num() / 3;
 
-			// Gather polygons
-			const FColor PolygonColor = FColor::Blue;
-			constexpr float PolygonThickness = 2.0f;
-			for (int32 i = 0; i < Indices; ++i)
-			{
-				FVector FirstPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3]);
-				FVector SecondPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3 + 1]);
-				FVector ThirdPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3 + 2]);
-				FDebugRenderSceneProxy::FDebugLine FirstLine (FirstPoint, SecondPoint, PolygonColor, PolygonThickness);
-				FDebugRenderSceneProxy::FDebugLine SecondLine (SecondPoint, ThirdPoint, PolygonColor, PolygonThickness);
-				FDebugRenderSceneProxy::FDebugLine ThirdLine (ThirdPoint, FirstPoint, PolygonColor, PolygonThickness);
-				AuxLines.Add(MoveTemp(FirstLine));
-				AuxLines.Add(MoveTemp(SecondLine));
-				AuxLines.Add(MoveTemp(ThirdLine));
+				// Gather vertices
+				for (int32 i = 0; i < Geometries; ++i)
+				{
+					FVector Position = GeometryToDraw.GetGeometryPosition(i);
+					FDebugPoint Point (Position, FColor::Green, 10.0f);
+					AuxPoints.Add(MoveTemp(Point));
+				}
+
+				// Gather polygons
+				const FColor PolygonColor = FColor::Blue;
+				constexpr float PolygonThickness = 2.0f;
+				for (int32 i = 0; i < Indices; ++i)
+				{
+					FVector FirstPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3]);
+					FVector SecondPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3 + 1]);
+					FVector ThirdPoint = GeometryToDraw.GetGeometryPosition(GeometryToDraw.GeomIndices[i * 3 + 2]);
+					FDebugRenderSceneProxy::FDebugLine FirstLine (FirstPoint, SecondPoint, PolygonColor, PolygonThickness);
+					FDebugRenderSceneProxy::FDebugLine SecondLine (SecondPoint, ThirdPoint, PolygonColor, PolygonThickness);
+					FDebugRenderSceneProxy::FDebugLine ThirdLine (ThirdPoint, FirstPoint, PolygonColor, PolygonThickness);
+					AuxLines.Add(MoveTemp(FirstLine));
+					AuxLines.Add(MoveTemp(SecondLine));
+					AuxLines.Add(MoveTemp(ThirdLine));
+				}
 			}
 		}
 
 		// Gather the HeightField spans
-		const FColor HeightFieldColor = FColor::Red;
-		for (const FBox& HeightField : DebuggingInfo.HeightFields)
+		if (NavMesh->bDrawHeightField)
 		{
-			FDebugRenderSceneProxy::FDebugBox Box (HeightField, HeightFieldColor);
-			AuxBoxes.Add(MoveTemp(Box));
+			const FColor HeightFieldColor = FColor::Red;
+			for (const FBox& HeightField : DebuggingInfo.HeightFields)
+			{
+				FDebugRenderSceneProxy::FDebugBox Box (HeightField, HeightFieldColor);
+				AuxBoxes.Add(MoveTemp(Box));
+			}
+		}
+
+		// Gather the BoxSpheresTemporary
+		for (const FBoxSphereBounds& BoxSphere : DebuggingInfo.TemporaryBoxSpheres)
+		{
+			AuxPoints.Emplace(BoxSphere.Origin, FColor::Orange, BoxSphere.SphereRadius);
+		}
+
+		for (const FNNNavMeshSceneProxyData::FDebugText& Text : DebuggingInfo.TemporaryTexts)
+		{
+			DebugLabels.Add(Text);
 		}
 	}
 }
@@ -121,7 +141,7 @@ FNNNavMeshSceneProxy::FNNNavMeshSceneProxy(const UPrimitiveComponent* InComponen
 	  , bRequestedData(false)
 	  , bForceRendering(ForceToRender)
 {
-	DrawType = EDrawType::WireMesh;
+	DrawType = EDrawType::SolidMesh;
 
 	if (InProxyData)
 	{
@@ -234,6 +254,36 @@ void FNNNavMeshDebugDrawHelper::UnregisterDebugDrawDelgate()
 		UDebugDrawService::Unregister(DebugTextDrawingDelegateHandle);
 		State = InitializedState;
 	}
+}
+
+void FNNNavMeshDebugDrawHelper::DrawDebugLabels(UCanvas* Canvas, APlayerController* PlayerController)
+{
+	if (!Canvas)
+	{
+		return;
+	}
+
+	const bool bVisible = (Canvas->SceneView && !!Canvas->SceneView->Family->EngineShowFlags.Navigation) || bForceRendering;
+	if (!bVisible || bNeedsNewData || DebugLabels.Num() == 0)
+	{
+		return;
+	}
+
+	const FColor OldDrawColor = Canvas->DrawColor;
+	Canvas->SetDrawColor(FColor::White);
+	const FSceneView* View = Canvas->SceneView;
+	const UFont* Font = GEngine->GetSmallFont();
+	const FNNNavMeshSceneProxyData::FDebugText* DebugText = DebugLabels.GetData();
+	for (int32 Idx = 0; Idx < DebugLabels.Num(); ++Idx, ++DebugText)
+	{
+		if (View->ViewFrustum.IntersectSphere(DebugText->Location, 1.0f))
+		{
+			const FVector ScreenLoc = Canvas->Project(DebugText->Location);
+			Canvas->DrawText(Font, DebugText->Text, ScreenLoc.X, ScreenLoc.Y);
+		}
+	}
+
+	Canvas->SetDrawColor(OldDrawColor);
 }
 
 FPrimitiveSceneProxy* UNNNavMeshRenderingComp::CreateSceneProxy()

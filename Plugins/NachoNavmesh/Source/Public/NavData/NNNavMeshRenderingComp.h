@@ -108,6 +108,10 @@ struct FNNNavMeshDebuggingInfo
 	TArray<FNNRawGeometryElement> RawGeometryToDraw;
 	/** The HeightField spans represented as boxes */
 	TArray<FBox> HeightFields;
+	/** Box spheres for debugging. No specific usage */
+	TArray<FBoxSphereBounds> TemporaryBoxSpheres;
+	/** Texts for debugging. No specific usage */
+	TArray<FNNNavMeshSceneProxyData::FDebugText> TemporaryTexts;
 };
 
 class FNNNavMeshDebugDrawHelper : public FDebugDrawDelegateHelper
@@ -123,6 +127,8 @@ public:
 	virtual void RegisterDebugDrawDelgate() override;
 	virtual void UnregisterDebugDrawDelgate() override;
 
+	/** Draws the texts from the DebugLabels array */
+	virtual void DrawDebugLabels(UCanvas* Canvas, APlayerController*) override;
 private:
 	TArray<FNNNavMeshSceneProxyData::FDebugText> DebugLabels;
 	uint32 bForceRendering : 1;

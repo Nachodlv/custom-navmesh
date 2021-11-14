@@ -1,5 +1,8 @@
 ﻿#pragma once
 
+// NN Includes
+#include "NNNavMeshRenderingComp.h"
+
 class UNavigationSystemV1;
 class FNNNavMeshGenerator;
 
@@ -7,8 +10,8 @@ class FNNNavMeshGenerator;
 struct FNNRawGeometryElement
 {
 	// Instance geometry
-	TArray<float>		GeomCoords;
-	TArray<int32>		GeomIndices;
+	TArray<float> GeomCoords;
+	TArray<int32> GeomIndices;
 
 	// Per instance transformations in unreal coords
 	// When empty geometry is in world space
@@ -55,13 +58,16 @@ struct Span
 	uint8 MinSpanHeight = 0;
 	Span* NextSpan = nullptr;
 	bool bWalkable = false;
+
+	/** Returns a readable representation of this Span */
+	FString ToString() const;
 };
 
 /** Container of spans */
-struct HeightField
+struct FNNHeightField
 {
-	HeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth);
-	~HeightField();
+	FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth);
+	~FNNHeightField();
 
 	/** How spans are contained in every axis */
 	int32 UnitsWidth = 0; // X
@@ -86,7 +92,13 @@ struct FNNAreaGeneratorData
 	// tile's geometry: without voxel cache
 	TArray<FNNRawGeometryElement> RawGeometry;
 
-	HeightField* HeightField;
+	FNNHeightField* HeightField;
+
+	/** BoxSpheres used for debugging */
+	TArray<FBoxSphereBounds> TemporaryBoxSpheres;
+
+	/** Texts used for debugging */
+	TArray<FNNNavMeshSceneProxyData::FDebugText> TemporaryTexts;
 };
 
 /** Calculates the nav mesh for a specific FNavigationBounds */
@@ -109,8 +121,6 @@ protected:
 	/** Appends specified geometry to the AreaGeneratorData */
 	void AppendGeometry(const FNavigationRelevantData& DataRef, const FCompositeNavModifier& InModifier, const FNavDataPerInstanceTransformDelegate& InTransformsDelegate);
 
-	/** Creates a HeightField with the given parameters */
-	HeightField* InitializeHeightField(const FVector& MinPoint, const FVector& MaxPoint, float CellSize, float CellHeight) const;
 private:
 	/** The bounds assigned to the AreaGenerator */
 	FNavigationBounds AreaBounds;

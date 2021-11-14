@@ -19,6 +19,10 @@ bool FNNNavMeshGenerator::RebuildAll()
 	{
 		DirtyAreas.AddUnique(NavBound.UniqueID);
 	}
+	for (const auto& Data : GeneratorsData)
+	{
+		delete Data.Value;
+	}
 	GeneratorsData.Reset();
 	return true;
 }
@@ -82,6 +86,8 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 	for (const auto& Result : GeneratorsData)
 	{
 		DebuggingInfo.RawGeometryToDraw.Append(Result.Value->RawGeometry);
+		DebuggingInfo.TemporaryBoxSpheres.Append(Result.Value->TemporaryBoxSpheres);
+		DebuggingInfo.TemporaryTexts.Append(Result.Value->TemporaryTexts);
 
 		const TArray<Span*>& Spans = Result.Value->HeightField->Spans;
 
@@ -103,10 +109,11 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 			const Span* CurrentSpan = Spans[i];
 			while (CurrentSpan)
 			{
-				float Z = HeightIndex * CellHeight;
+				const float MinZ = CurrentSpan->MinSpanHeight * CellHeight;
+				const float MaxZ = CurrentSpan->MaxSpanHeight * CellHeight;
 				FVector MinPoint = BoundMinPoint;
-				MinPoint += FVector(X, Y, Z);
-				FVector MaxPoint = MinPoint + FVector(CellSize, CellSize, CellHeight);
+				MinPoint += FVector(X, Y, MinZ);
+				FVector MaxPoint = BoundMinPoint + FVector(X + CellSize, Y + CellSize, MaxZ);
 				DebuggingInfo.HeightFields.Emplace(MinPoint, MaxPoint);
 
 				CurrentSpan = CurrentSpan->NextSpan;

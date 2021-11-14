@@ -50,8 +50,23 @@ public:
 	UPROPERTY(EditAnywhere, Category = "NN|Debug")
 	bool bDrawGeometry = true;
 
-private:
+	/** Whether it should draw points in the element vertex and lines between them */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug")
+	bool bDrawPolygons = true;
+
+	/** Whether it should draw the spans from the HeightField */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug")
+	bool bDrawHeightField = true;
+
 	/** Size of the tallest agent that will path with this navmesh. */
 	UPROPERTY(EditAnywhere, Category = "NN|Config")
 	float AgentHeight;
+
+	/** The X and Y size from the Spans in the HeightField */
+	UPROPERTY(EditAnywhere, Category = "NN|Config")
+	float CellSize = 20.0f;
+
+	/** The Z size from the Spans in the HeightField */
+	UPROPERTY(EditAnywhere, Category = "NN|Config")
+	float CellHeight = 20.0f;
 };

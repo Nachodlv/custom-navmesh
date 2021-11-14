@@ -4,6 +4,7 @@
 #include "NavigationSystem.h"
 
 // NN Includes
+#include "NavData/HeightFieldGenerator.h"
 #include "NavData/NNNavMeshGenerator.h"
 
 FVector FNNRawGeometryElement::GetGeometryPosition(int32 Index) const
@@ -23,17 +24,30 @@ Span::~Span()
 	if (NextSpan)
 	{
 		delete NextSpan;
+		NextSpan = nullptr;
 	}
 }
 
-HeightField::HeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth)
+FString Span::ToString() const
+{
+	return FString::Printf(TEXT("(%d, %d)%s"),
+		MinSpanHeight,
+		MaxSpanHeight,
+		NextSpan ? *FString::Printf(TEXT("->%s"), *NextSpan->ToString()) : *FString());
+}
+
+FNNHeightField::FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth)
 	: UnitsWidth(InUnitsWidth), UnitsHeight(InUnitsHeight), UnitsDepth(InUnitsDepth)
 {
 	Spans.Init(nullptr, InUnitsWidth * InUnitsDepth);
 }
 
-HeightField::~HeightField()
+FNNHeightField::~FNNHeightField()
 {
+	for (const Span* Span : Spans)
+	{
+		delete Span;
+	}
 	Spans.Reset();
 }
 
@@ -51,20 +65,22 @@ void FNNAreaGenerator::DoWork()
 {
 	check(ParentGenerator);
 
-	if (!AreaGeneratorData)
+	if (AreaGeneratorData)
 	{
-		AreaGeneratorData = new FNNAreaGeneratorData();
+		delete AreaGeneratorData;
 	}
+	AreaGeneratorData = new FNNAreaGeneratorData();
 
 	GatherGeometry(true);
 
-	constexpr float HeightFieldHeight = 200.0f; // Z Axis
-	constexpr float HeightFieldSize = 200.0f; // X and Y Axis
+	const float HeightFieldHeight = ParentGenerator->GetOwner()->CellHeight; // Z Axis
+	const float HeightFieldSize = ParentGenerator->GetOwner()->CellSize; // X and Y Axis
 
 	const FVector& MinimumPoint = AreaBounds.AreaBox.Min;
 	const FVector& MaximumPoint = AreaBounds.AreaBox.Max;
 
-	AreaGeneratorData->HeightField = InitializeHeightField(MinimumPoint, MaximumPoint, HeightFieldSize, HeightFieldHeight);
+	const FHeightFieldGenerator Generator (*AreaGeneratorData);
+	AreaGeneratorData->HeightField = Generator.InitializeHeightField(AreaGeneratorData->RawGeometry, MinimumPoint, MaximumPoint, HeightFieldSize, HeightFieldHeight);
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)
@@ -162,47 +178,4 @@ void FNNAreaGenerator::AppendGeometry(const FNavigationRelevantData& DataRef, co
 
 		AreaGeneratorData->RawGeometry.Add(MoveTemp(GeometryElement));
 	}
-}
-
-HeightField* FNNAreaGenerator::InitializeHeightField(const FVector& MinPoint, const FVector& MaxPoint, float CellSize, float CellHeight) const
-{
-	// https://en.wikipedia.org/wiki/Sutherland%E2%80%93Hodgman_algorithm
-	// Clip polygons in heightfields
-
-	const int32 XHeightFieldNum = FMath::CeilToInt((MaxPoint.X - MinPoint.X) / CellSize);
-	const int32 YHeightFieldNum = FMath::CeilToInt((MaxPoint.Y - MinPoint.Y) / CellSize);
-	const int32 ZHeightFieldNum = FMath::CeilToInt((MaxPoint.Z - MinPoint.Z) / CellHeight);
-
-	HeightField* Field = new HeightField(XHeightFieldNum, ZHeightFieldNum, YHeightFieldNum);
-	Field->CellHeight = CellHeight;
-	Field->CellSize = CellSize;
-	Field->MaxPoint = MaxPoint;
-	Field->MinPoint = MinPoint;
-
-	for (int32 i = 0; i < ZHeightFieldNum; ++i)
-	{
-		for (int32 j = 0; j < YHeightFieldNum; ++j)
-		{
-			for (int32 k = 0; k < XHeightFieldNum; ++k)
-			{
-				// We should only create span if intersects with a polygon
-				Span* NewSpan = new Span();
-				Span* BelowSpawn = Field->Spans[k + j * XHeightFieldNum];
-				UE_LOG(LogTemp, Warning, TEXT("Index: %d"), k + j * XHeightFieldNum);
-				if (!BelowSpawn)
-				{
-					 Field->Spans[k + j * XHeightFieldNum] = NewSpan;
-				}
-				else
-				{
-					while (BelowSpawn->NextSpan)
-					{
-						BelowSpawn = BelowSpawn->NextSpan;
-					}
-					BelowSpawn->NextSpan = NewSpan;
-				}
-			}
-		}
-	}
-	return Field;
 }
