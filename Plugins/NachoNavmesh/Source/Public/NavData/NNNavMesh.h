@@ -69,4 +69,12 @@ public:
 	/** The Z size from the Spans in the HeightField */
 	UPROPERTY(EditAnywhere, Category = "NN|Config")
 	float CellHeight = 20.0f;
+
+	/** The maximum possible angle the agent can climb */
+	UPROPERTY(EditAnywhere, Category = "NN|Config")
+	float WalkableSlopeDegrees = 45.0f;
+
+	/** The maximum ledge an agent can walk */
+	UPROPERTY(EditAnywhere, Category = "NN|Config")
+	float MaxLedgeHeight = 50.0f;
 };

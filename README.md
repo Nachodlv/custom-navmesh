@@ -17,7 +17,7 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - [X] Gather Geometry
   - [X] Footprint the geometry
   - [X] Implement heightfields
-  - [ ] Identify walkable spans
+  - [X] Identify walkable spans
   - [ ] Implement open heightfields
 - [ ] Region Generation
 - [ ] Contour Generation

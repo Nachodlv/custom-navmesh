@@ -1,6 +1,9 @@
 ﻿#pragma once
 
 // NN Includes
+#include <memory>
+#include <vector>
+
 #include "NNNavMeshRenderingComp.h"
 
 class UNavigationSystemV1;
@@ -52,11 +55,22 @@ struct FNNGeometryCache
 struct Span
 {
 	Span() {}
-	~Span();
+	Span (Span& InSpan)
+	{
+		MaxSpanHeight = InSpan.MaxSpanHeight;
+		MinSpanHeight = InSpan.MinSpanHeight;
+		bWalkable = InSpan.bWalkable;
+		if (InSpan.NextSpan)
+		{
+			NextSpan = std::make_unique<Span>(*InSpan.NextSpan.release());
+		}
+	}
 
-	uint8 MaxSpanHeight = 0;
-	uint8 MinSpanHeight = 0;
-	Span* NextSpan = nullptr;
+	Span(const Span& InSpan) = delete;
+
+	int32 MaxSpanHeight = INDEX_NONE;
+	int32 MinSpanHeight = INDEX_NONE;
+	std::unique_ptr<Span> NextSpan = nullptr;
 	bool bWalkable = false;
 
 	/** Returns a readable representation of this Span */
@@ -67,7 +81,6 @@ struct Span
 struct FNNHeightField
 {
 	FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth);
-	~FNNHeightField();
 
 	/** How spans are contained in every axis */
 	int32 UnitsWidth = 0; // X
@@ -82,7 +95,7 @@ struct FNNHeightField
 	float CellSize = 0.0f;
 	float CellHeight = 0.0f;
 
-	TArray<Span*> Spans; // 2D array, UnitsWidth * UnitsDepth
+	std::vector<std::unique_ptr<Span>> Spans; // 2D array, UnitsWidth * UnitsDepth
 };
 
 /** The result of the FNNAreaGenerator */
@@ -96,6 +109,9 @@ struct FNNAreaGeneratorData
 
 	/** BoxSpheres used for debugging */
 	TArray<FBoxSphereBounds> TemporaryBoxSpheres;
+
+	/** Lines used for debugging */
+	TArray<FDebugRenderSceneProxy::FDebugLine>  TemporaryLines;
 
 	/** Texts used for debugging */
 	TArray<FNNNavMeshSceneProxyData::FDebugText> TemporaryTexts;

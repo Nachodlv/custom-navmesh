@@ -3,13 +3,15 @@
 // UE Includes
 #include "Collision.h"
 #include "Chaos/AABB.h"
+#include "Kismet/KismetMathLibrary.h"
 
 // NN Includes
 #include "NavData/NNAreaGenerator.h"
+#include "NavData/NNNavMeshHelper.h"
 
 #define NN_LOG_SPAN_ATTACHMENT 0
 
-FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeometryElement>& RawGeometry, const FVector& BoundMinPoint, const FVector& BoundMaxPoint, float CellSize, float CellHeight) const
+FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeometryElement>& RawGeometry, const FVector& BoundMinPoint, const FVector& BoundMaxPoint, float CellSize, float CellHeight, float WalkableAngle, float AgentHeight, float MinLedgeHeight) const
 {
 	// https://en.wikipedia.org/wiki/Sutherland%E2%80%93Hodgman_algorithm
 	// Clip polygons in heightfields
@@ -25,6 +27,8 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 	Field->MaxPoint = BoundMaxPoint;
 	Field->MinPoint = BoundMinPoint;
 
+	const float WalkableRadians = FMath::DegreesToRadians(WalkableAngle);
+
 	for (FNNRawGeometryElement& GeometryElement : RawGeometry)
 	{
 		const int32 PolygonsNum = GeometryElement.GeomIndices.Num() / 3;
@@ -34,6 +38,12 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 			const FVector SecondPoint = GeometryElement.GetGeometryPosition(GeometryElement.GeomIndices[PolygonIndex * 3 + 1]);
 			const FVector ThirdPoint = GeometryElement.GetGeometryPosition(GeometryElement.GeomIndices[PolygonIndex * 3 + 2]);
 			TArray<FVector> Polygon = {FirstPoint, SecondPoint, ThirdPoint};
+			FVector PolygonNormal = FNNNavMeshHelper::CalculatePolygonNormal(Polygon);
+
+			FVector PolygonCenter = UKismetMathLibrary::GetVectorArrayAverage(Polygon);
+			// AddDebugLine(PolygonCenter, PolygonCenter + PolygonNormal * 50.0f);
+
+			const bool bPolygonWalkable  = IsPolygonWalkable(PolygonNormal, WalkableRadians);
 
 			// Create a 2D bound box of the current polygon in the X and Y axis
 			FVector MinimumPoint;
@@ -61,22 +71,24 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 						// If the polygon intersects with the cell, create a new span
 						if (PointCheck.bHit)
 						{
-							Span* NewSpan = new Span();
-							// TODO (ignacio) Check if spawn is walkable
-							NewSpan->bWalkable = false;
+							std::unique_ptr<Span> NewSpan = std::make_unique<Span>();
+
+							NewSpan->bWalkable = bPolygonWalkable;
 							NewSpan->MaxSpanHeight = k + 1;
 							NewSpan->MinSpanHeight = k;
 
 							// Add the new span in the HeightField
-							Span* CurrentSpawn = Field->Spans[i + j * XHeightFieldNum];
+							std::unique_ptr<Span>& CurrentSpan = Field->Spans[i + j * XHeightFieldNum];
 #if WITH_EDITOR && NN_LOG_SPAN_ATTACHMENT
 							UE_LOG(LogTemp, Warning, TEXT("----------"));
-							if (CurrentSpawn)
+							if (CurrentSpan)
 							{
-								UE_LOG(LogTemp, Warning, TEXT("Attaching %s with %s"), *CurrentSpawn->ToString(), *NewSpan->ToString());
+								UE_LOG(LogTemp, Warning, TEXT("Attaching %s with %s"), *CurrentSpan->ToString(), *NewSpan->ToString());
 							}
 #endif
-							Field->Spans[i + j * XHeightFieldNum] = AttachNewSpan(CurrentSpawn, NewSpan);
+							AttachNewSpan(CurrentSpan, NewSpan);
+							// AddDebugText(Cell.GetCenter(), FString::FromInt(i + j * XHeightFieldNum));
+							// AddDebugText(Cell.GetCenter(), FString::Printf(TEXT("(%d, %d)"), i , j));
 #if WITH_EDITOR && NN_LOG_SPAN_ATTACHMENT
 							UE_LOG(LogTemp, Warning, TEXT("Result: %s"), *Field->Spans[i + j * XHeightFieldNum]->ToString())
 #endif
@@ -87,8 +99,150 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 		}
 	}
 
+	for (int32 i = 0; i < Field->Spans.size(); ++i)
+	{
+		Span* CurrentSpan = Field->Spans[i].get();
+		while (CurrentSpan)
+		{
+			const int32 Y = (i / Field->UnitsWidth);
+			const int32 X = (i % Field->UnitsWidth);
+			CurrentSpan->bWalkable = IsSpanWalkable(Field, X, Y, CurrentSpan, AgentHeight, MinLedgeHeight);
+			CurrentSpan = CurrentSpan->NextSpan.get();
+		}
+	}
+
 	return Field;
 }
+
+bool FHeightFieldGenerator::IsPolygonWalkable(const FVector& PolygonNormal, float MaxWalkableRadians) const
+{
+	// const FVector FloorZAxis = PolygonNormal;
+	// const FVector FloorXAxis = FVector::RightVector ^ FloorZAxis;
+	// const FVector FloorYAxis = FloorZAxis ^ FloorXAxis;
+	// const float Pitch = FMath::Acos(FloorXAxis | FVector::UpVector);
+	// const float Roll = FMath::Acos(FloorYAxis | FVector::UpVector);
+	//
+	// UE_LOG(LogTemp, Warning, TEXT("Pitch: %f, Rolls :%f"), Pitch, Roll);
+	//
+	// return Pitch > MaxWalkableRadians && Roll > MaxWalkableRadians;
+
+	const float Rotation = FMath::Acos(FVector::DotProduct(PolygonNormal, FVector::UpVector));
+
+	return Rotation < MaxWalkableRadians;
+}
+
+bool FHeightFieldGenerator::IsSpanWalkable(const FNNHeightField* HeightField, int32 XIndex, int32 YIndex, const Span* InSpan, float  AgentHeight, float MinLedgeHeight) const
+{
+	if (!InSpan->bWalkable)
+	{
+		return false;
+	}
+
+	// Check if there is enough space in top of span so the agent can step on it
+	if (InSpan->NextSpan)
+	{
+		const int32 MaxSpanHeight = InSpan->MaxSpanHeight;
+		const int32 MinNextSpanHeight = InSpan->NextSpan->MinSpanHeight;
+		const float SpaceBetweenSpans = (MinNextSpanHeight - MaxSpanHeight) * HeightField->CellHeight;
+		if (SpaceBetweenSpans < AgentHeight)
+		{
+			return false;
+		}
+	}
+
+	// Check if the span is a ledge by checking the height of its neighbours
+	const std::vector<std::unique_ptr<Span>>& Spans = HeightField->Spans;
+	TArray<Span*> Neighbours = GetSpanNeighbours(HeightField, XIndex, YIndex, InSpan);
+
+	// UE_LOG(LogTemp, Warning, TEXT("\n---------"));
+	// UE_LOG(LogTemp, Warning, TEXT("%d neighbours are: "), XIndex + YIndex * HeightField->UnitsWidth);
+
+	for (const Span* Neighbour : Neighbours)
+	{
+		// If its invalid it means the span is in the border of the HeightField
+		// Should we consider it as ledge?
+		float HeightDifference = 0.0f;
+		if (Neighbour)
+		{
+			HeightDifference = FMath::Abs(Neighbour->MaxSpanHeight - InSpan->MaxSpanHeight) * HeightField->CellHeight;
+		}
+		else
+		{
+			HeightDifference = InSpan->MaxSpanHeight * HeightField->CellHeight;
+		}
+		if (HeightDifference > MinLedgeHeight)
+		{
+			// UE_LOG(LogTemp, Warning, TEXT("%d - FALSE"), NeighbourIndex);
+			return false;
+		}
+		// UE_LOG(LogTemp, Warning, TEXT("%d - TRUE"), NeighbourIndex);
+	}
+
+	return true;
+}
+
+
+TArray<Span*> FHeightFieldGenerator::GetSpanNeighbours(const FNNHeightField* HeightField, int32 XIndex, int32 YIndex, const Span* CurrentSpan) const
+{
+	TArray<int32> NeighboursIndexes;
+	NeighboursIndexes.Init(INDEX_NONE, 4);
+	if (XIndex < HeightField->UnitsDepth - 1)
+	{
+		NeighboursIndexes[0] = XIndex + 1 + YIndex * HeightField->UnitsWidth;
+	}
+	if (XIndex >= 1)
+	{
+		NeighboursIndexes[1] = XIndex - 1 + YIndex * HeightField->UnitsWidth;
+	}
+	if (YIndex < HeightField->UnitsDepth - 1)
+	{
+		NeighboursIndexes[2] = XIndex + (YIndex + 1) * HeightField->UnitsWidth;
+	}
+	if (YIndex >= 1)
+	{
+		NeighboursIndexes[3] = XIndex + (YIndex - 1) * HeightField->UnitsWidth;
+	}
+	TArray<Span*> Neighbours;
+	Neighbours.Init(nullptr, 4);
+	for (int32 i = 0; i < 4; ++i)
+	{
+		int32 NeighbourIndex = NeighboursIndexes[i];
+
+		// If its invalid it means the span is in the border of the HeightField
+		// Should we consider it as ledge?
+		if (NeighbourIndex >= 0 && NeighbourIndex < HeightField->Spans.size())
+		{
+			Span* BestNeighbourSpan = HeightField->Spans[NeighbourIndex].get();
+			if (!BestNeighbourSpan)
+			{
+				continue;
+			}
+
+			int32 MinorDifference = FMath::Abs(BestNeighbourSpan->MaxSpanHeight - CurrentSpan->MaxSpanHeight);
+			Span* NextSpan = BestNeighbourSpan->NextSpan.get();
+			// Search of the nearest span of the CurrentSpan
+			while (NextSpan)
+			{
+				const int32 NextDifference = FMath::Abs(NextSpan->MaxSpanHeight - CurrentSpan->MaxSpanHeight);
+				if (NextDifference < MinorDifference)
+				{
+					BestNeighbourSpan = NextSpan;
+					MinorDifference = NextDifference;
+					NextSpan = NextSpan->NextSpan.get();
+				}
+				else
+				{
+					// There is no need to continue checking, the difference will keep growing
+					break;
+				}
+			}
+			Neighbours[i] = BestNeighbourSpan;
+		}
+	}
+
+	return Neighbours;
+}
+
 
 bool FHeightFieldGenerator::Generate2DBoundingBoxForGeometry(TArray<FVector>& Polygon, FVector& OutMinimumPoint, FVector& OutMaximumPoint, const FBox& BoundBox)
 {
@@ -132,25 +286,20 @@ bool FHeightFieldGenerator::Generate2DBoundingBoxForGeometry(TArray<FVector>& Po
 	return true;
 }
 
-Span* FHeightFieldGenerator::AttachNewSpan(Span* CurrentSpan, Span* NewSpan)
+void FHeightFieldGenerator::AttachNewSpan(std::unique_ptr<Span>& CurrentSpan, std::unique_ptr<Span>& NewSpan) const
 {
-	// Bug:
-	/**
-		LogTemp: Warning: Attaching (2, 3)->(4, 6) with (1, 2)
-		LogTemp: Warning: Result: (1, 3)
-	*/
-
-
 	if (!CurrentSpan)
 	{
-		return NewSpan;
+		CurrentSpan = std::make_unique<Span>(*NewSpan.release());
+		return;
 	}
 
 	// They are the same Span
 	if (CurrentSpan->MaxSpanHeight == NewSpan->MaxSpanHeight && CurrentSpan->MinSpanHeight == NewSpan->MinSpanHeight)
 	{
-		delete NewSpan;
-		return CurrentSpan;
+		// I think this should be an &= but i have problems with planes
+		CurrentSpan->bWalkable |= NewSpan->bWalkable;
+		return;
 	}
 
 	// The new span is above the current span
@@ -159,32 +308,34 @@ Span* FHeightFieldGenerator::AttachNewSpan(Span* CurrentSpan, Span* NewSpan)
 		// They are not colliding
 		if (NewSpan->MinSpanHeight > CurrentSpan->MaxSpanHeight)
 		{
-			CurrentSpan->NextSpan = AttachNewSpan(CurrentSpan->NextSpan, NewSpan);
+			AttachNewSpan(CurrentSpan->NextSpan, NewSpan);
 		}
 		// They are colliding. We should combine them
 		else
 		{
 			CombineSpans(CurrentSpan, NewSpan);
 		}
-		return CurrentSpan;
 	}
-
-	// The new span is below the current span
-
-	// They are not colliding
-	if (NewSpan->MaxSpanHeight < CurrentSpan->MinSpanHeight)
-	{
-		NewSpan->NextSpan = CurrentSpan;
-	}
-	// They are colliding. We should combine them
 	else
 	{
-		CombineSpans(NewSpan, CurrentSpan);
+		// The new span is below the current span
+
+		// They are not colliding
+		if (NewSpan->MaxSpanHeight < CurrentSpan->MinSpanHeight)
+		{
+			NewSpan->NextSpan = std::make_unique<Span>(*CurrentSpan.release());
+		}
+		// They are colliding. We should combine them
+		else
+		{
+			CombineSpans(NewSpan, CurrentSpan);
+		}
+
+		CurrentSpan = std::make_unique<Span>(*NewSpan);
 	}
-	return NewSpan;
 }
 
-Span* FHeightFieldGenerator::CombineSpans(Span* LowerSpan, const Span* HigherSpan)
+std::unique_ptr<Span>& FHeightFieldGenerator::CombineSpans(std::unique_ptr<Span>& LowerSpan, const std::unique_ptr<Span>& HigherSpan) const
 {
 	// The HigherSpan ceil is above the current LowerSpawn
 	if (HigherSpan->MaxSpanHeight > LowerSpan->MaxSpanHeight)
@@ -194,14 +345,14 @@ Span* FHeightFieldGenerator::CombineSpans(Span* LowerSpan, const Span* HigherSpa
 
 		if (HigherSpan->NextSpan)
 		{
-			LowerSpan->NextSpan = AttachNewSpan(LowerSpan->NextSpan, HigherSpan->NextSpan);
+			AttachNewSpan(LowerSpan->NextSpan, HigherSpan->NextSpan);
 		}
 
 		// Check if the current span needs to be combined with its next span
 		if (LowerSpan->NextSpan)
 		{
-			Span* NextSpan = LowerSpan->NextSpan;
-			LowerSpan->NextSpan = NextSpan->NextSpan;
+			std::unique_ptr<Span> NextSpan = std::make_unique<Span>(*LowerSpan->NextSpan.release());
+			LowerSpan->NextSpan = NextSpan->NextSpan ? std::make_unique<Span>(*NextSpan->NextSpan.release()) : std::unique_ptr<Span>();
 
 			AttachNewSpan(LowerSpan, NextSpan);
 		}
@@ -211,8 +362,6 @@ Span* FHeightFieldGenerator::CombineSpans(Span* LowerSpan, const Span* HigherSpa
 	{
 		LowerSpan->bWalkable |= HigherSpan->bWalkable;
 	}
-	// The HigherSpan is inside the current one we don't do anything
-	delete HigherSpan;
 
 	return LowerSpan;
 }
@@ -226,5 +375,10 @@ void FHeightFieldGenerator::AddDebugPoint(const FVector& Point, float Radius) co
 void FHeightFieldGenerator::AddDebugText(const FVector& Location, const FString& Text) const
 {
 	AreaGeneratorData.TemporaryTexts.Emplace(Location, Text);
+}
+
+void FHeightFieldGenerator::AddDebugLine(const FVector& Start, const FVector& End) const
+{
+	AreaGeneratorData.TemporaryLines.Emplace(Start, End, FColor::Blue, 2.0f);
 }
 

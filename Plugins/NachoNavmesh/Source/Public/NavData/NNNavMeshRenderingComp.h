@@ -104,14 +104,23 @@ private:
 /** Contains the information used to calculate the debugging info */
 struct FNNNavMeshDebuggingInfo
 {
+
+	struct HeightFieldDebugBox
+	{
+		FBox Box;
+		FColor Color;
+	};
+
 	/** The geometry vertices */
 	TArray<FNNRawGeometryElement> RawGeometryToDraw;
 	/** The HeightField spans represented as boxes */
-	TArray<FBox> HeightFields;
+	TArray<HeightFieldDebugBox> HeightFields;
 	/** Box spheres for debugging. No specific usage */
 	TArray<FBoxSphereBounds> TemporaryBoxSpheres;
 	/** Texts for debugging. No specific usage */
 	TArray<FNNNavMeshSceneProxyData::FDebugText> TemporaryTexts;
+	/** Lines for debugging. No specific usage */
+	TArray<FDebugRenderSceneProxy::FDebugLine> TemporaryLines;
 };
 
 class FNNNavMeshDebugDrawHelper : public FDebugDrawDelegateHelper

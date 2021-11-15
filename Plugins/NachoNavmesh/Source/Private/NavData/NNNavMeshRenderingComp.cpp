@@ -110,9 +110,9 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 		if (NavMesh->bDrawHeightField)
 		{
 			const FColor HeightFieldColor = FColor::Red;
-			for (const FBox& HeightField : DebuggingInfo.HeightFields)
+			for (const FNNNavMeshDebuggingInfo::HeightFieldDebugBox& HeightField : DebuggingInfo.HeightFields)
 			{
-				FDebugRenderSceneProxy::FDebugBox Box (HeightField, HeightFieldColor);
+				FDebugRenderSceneProxy::FDebugBox Box (HeightField.Box, HeightField.Color);
 				AuxBoxes.Add(MoveTemp(Box));
 			}
 		}
@@ -126,6 +126,11 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 		for (const FNNNavMeshSceneProxyData::FDebugText& Text : DebuggingInfo.TemporaryTexts)
 		{
 			DebugLabels.Add(Text);
+		}
+
+		for (const FDebugRenderSceneProxy::FDebugLine& Line : DebuggingInfo.TemporaryLines)
+		{
+			AuxLines.Add(Line);
 		}
 	}
 }

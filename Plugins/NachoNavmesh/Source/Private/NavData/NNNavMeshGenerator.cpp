@@ -85,11 +85,12 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 {
 	for (const auto& Result : GeneratorsData)
 	{
-		DebuggingInfo.RawGeometryToDraw.Append(Result.Value->RawGeometry);
+		DebuggingInfo.RawGeometryToDraw = Result.Value->RawGeometry;
 		DebuggingInfo.TemporaryBoxSpheres.Append(Result.Value->TemporaryBoxSpheres);
 		DebuggingInfo.TemporaryTexts.Append(Result.Value->TemporaryTexts);
+		DebuggingInfo.TemporaryLines.Append(Result.Value->TemporaryLines);
 
-		const TArray<Span*>& Spans = Result.Value->HeightField->Spans;
+		const std::vector<std::unique_ptr<Span>>& Spans = Result.Value->HeightField->Spans;
 
 		// TODO (ignacio) this can be moved to a function
 		FNavigationBounds DataSearch;
@@ -101,12 +102,11 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		const float CellSize = Result.Value->HeightField->CellSize;
 		const float CellHeight = Result.Value->HeightField->CellHeight;
 		const int32 UnitsWidth = Result.Value->HeightField->UnitsWidth;
-		for (int32 i = 0; i < Spans.Num(); ++i)
+		for (int32 i = 0; i < Spans.size(); ++i)
 		{
 			const float Y = (i / UnitsWidth) * CellSize;
 			const float X = (i % UnitsWidth) * CellSize;
-			int32 HeightIndex = 0;
-			const Span* CurrentSpan = Spans[i];
+			const Span* CurrentSpan = Spans[i].get();
 			while (CurrentSpan)
 			{
 				const float MinZ = CurrentSpan->MinSpanHeight * CellHeight;
@@ -114,10 +114,13 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 				FVector MinPoint = BoundMinPoint;
 				MinPoint += FVector(X, Y, MinZ);
 				FVector MaxPoint = BoundMinPoint + FVector(X + CellSize, Y + CellSize, MaxZ);
-				DebuggingInfo.HeightFields.Emplace(MinPoint, MaxPoint);
 
-				CurrentSpan = CurrentSpan->NextSpan;
-				++HeightIndex;
+				FNNNavMeshDebuggingInfo::HeightFieldDebugBox DebugBox;
+				DebugBox.Box = FBox(MinPoint, MaxPoint);
+				DebugBox.Color = CurrentSpan->bWalkable ? FColor::Green : FColor::Red;
+				DebuggingInfo.HeightFields.Add(MoveTemp(DebugBox));
+
+				CurrentSpan = CurrentSpan->NextSpan.get();
 			}
 		}
 	}

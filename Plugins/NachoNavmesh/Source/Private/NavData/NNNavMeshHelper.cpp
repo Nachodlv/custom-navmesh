@@ -44,6 +44,17 @@ bool FNNNavMeshHelper::CheckIfLineIntersectsWithBox(const FVector& B1, const FVe
 	return false;
 }
 
+FVector FNNNavMeshHelper::CalculatePolygonNormal(const TArray<FVector>& Polygon)
+{
+	check(Polygon.Num() == 3);
+
+	const FVector Vector0 = Polygon[0] - Polygon[1];
+	const FVector Vector1 = Polygon[2] - Polygon[0];
+
+	const FVector CrossProduct = FVector::CrossProduct(Vector0, Vector1);
+	return CrossProduct.GetSafeNormal();
+}
+
 bool FNNNavMeshHelper::GetIntersection(float fDst1, float fDst2, const FVector& P1, const FVector& P2, FVector& Hit)
 {
 	if ( (fDst1 * fDst2) >= 0.0f)
