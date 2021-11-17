@@ -32,10 +32,10 @@ FNNHeightField::FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 In
 	: UnitsWidth(InUnitsWidth), UnitsHeight(InUnitsHeight), UnitsDepth(InUnitsDepth)
 {
 	const int32 SpansLength = InUnitsWidth * InUnitsDepth;
-	Spans.reserve(SpansLength);
+	Spans.Reserve(SpansLength);
 	for (int32 i = 0; i < SpansLength; ++i)
 	{
-		Spans.push_back(nullptr);
+		Spans.Add(nullptr);
 	}
 }
 

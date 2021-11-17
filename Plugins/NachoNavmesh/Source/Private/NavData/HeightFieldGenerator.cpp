@@ -71,22 +71,28 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 						// If the polygon intersects with the cell, create a new span
 						if (PointCheck.bHit)
 						{
-							std::unique_ptr<Span> NewSpan = std::make_unique<Span>();
-
-							NewSpan->bWalkable = bPolygonWalkable;
-							NewSpan->MaxSpanHeight = k + 1;
-							NewSpan->MinSpanHeight = k;
+							Span NewSpan;
+							NewSpan.bWalkable = bPolygonWalkable;
+							NewSpan.MaxSpanHeight = k + 1;
+							NewSpan.MinSpanHeight = k;
 
 							// Add the new span in the HeightField
-							std::unique_ptr<Span>& CurrentSpan = Field->Spans[i + j * XHeightFieldNum];
+							Span* CurrentSpan = Field->Spans[i + j * XHeightFieldNum].Get();
 #if WITH_EDITOR && NN_LOG_SPAN_ATTACHMENT
 							UE_LOG(LogTemp, Warning, TEXT("----------"));
 							if (CurrentSpan)
 							{
-								UE_LOG(LogTemp, Warning, TEXT("Attaching %s with %s"), *CurrentSpan->ToString(), *NewSpan->ToString());
+								UE_LOG(LogTemp, Warning, TEXT("Attaching %s with %s"), *CurrentSpan->ToString(), *NewSpan.ToString());
 							}
 #endif
-							AttachNewSpan(CurrentSpan, NewSpan);
+							if (CurrentSpan)
+							{
+								AttachNewSpan(CurrentSpan, &NewSpan);
+							}
+							else
+							{
+								Field->Spans[i + j * XHeightFieldNum] = MakeUnique<Span>(NewSpan);
+							}
 							// AddDebugText(Cell.GetCenter(), FString::FromInt(i + j * XHeightFieldNum));
 							// AddDebugText(Cell.GetCenter(), FString::Printf(TEXT("(%d, %d)"), i , j));
 #if WITH_EDITOR && NN_LOG_SPAN_ATTACHMENT
@@ -99,15 +105,15 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 		}
 	}
 
-	for (int32 i = 0; i < Field->Spans.size(); ++i)
+	for (int32 i = 0; i < Field->Spans.Num(); ++i)
 	{
-		Span* CurrentSpan = Field->Spans[i].get();
+		Span* CurrentSpan = Field->Spans[i].Get();
 		while (CurrentSpan)
 		{
 			const int32 Y = (i / Field->UnitsWidth);
 			const int32 X = (i % Field->UnitsWidth);
 			CurrentSpan->bWalkable = IsSpanWalkable(Field, X, Y, CurrentSpan, AgentHeight, MinLedgeHeight);
-			CurrentSpan = CurrentSpan->NextSpan.get();
+			CurrentSpan = CurrentSpan->NextSpan.Get();
 		}
 	}
 
@@ -151,7 +157,7 @@ bool FHeightFieldGenerator::IsSpanWalkable(const FNNHeightField* HeightField, in
 	}
 
 	// Check if the span is a ledge by checking the height of its neighbours
-	const std::vector<std::unique_ptr<Span>>& Spans = HeightField->Spans;
+	const TArray<TUniquePtr<Span>>& Spans = HeightField->Spans;
 	TArray<Span*> Neighbours = GetSpanNeighbours(HeightField, XIndex, YIndex, InSpan);
 
 	// UE_LOG(LogTemp, Warning, TEXT("\n---------"));
@@ -210,16 +216,16 @@ TArray<Span*> FHeightFieldGenerator::GetSpanNeighbours(const FNNHeightField* Hei
 
 		// If its invalid it means the span is in the border of the HeightField
 		// Should we consider it as ledge?
-		if (NeighbourIndex >= 0 && NeighbourIndex < HeightField->Spans.size())
+		if (NeighbourIndex >= 0 && NeighbourIndex < HeightField->Spans.Num())
 		{
-			Span* BestNeighbourSpan = HeightField->Spans[NeighbourIndex].get();
+			Span* BestNeighbourSpan = HeightField->Spans[NeighbourIndex].Get();
 			if (!BestNeighbourSpan)
 			{
 				continue;
 			}
 
 			int32 MinorDifference = FMath::Abs(BestNeighbourSpan->MaxSpanHeight - CurrentSpan->MaxSpanHeight);
-			Span* NextSpan = BestNeighbourSpan->NextSpan.get();
+			Span* NextSpan = BestNeighbourSpan->NextSpan.Get();
 			// Search of the nearest span of the CurrentSpan
 			while (NextSpan)
 			{
@@ -228,7 +234,7 @@ TArray<Span*> FHeightFieldGenerator::GetSpanNeighbours(const FNNHeightField* Hei
 				{
 					BestNeighbourSpan = NextSpan;
 					MinorDifference = NextDifference;
-					NextSpan = NextSpan->NextSpan.get();
+					NextSpan = NextSpan->NextSpan.Get();
 				}
 				else
 				{
@@ -286,20 +292,13 @@ bool FHeightFieldGenerator::Generate2DBoundingBoxForGeometry(TArray<FVector>& Po
 	return true;
 }
 
-void FHeightFieldGenerator::AttachNewSpan(std::unique_ptr<Span>& CurrentSpan, std::unique_ptr<Span>& NewSpan) const
+void FHeightFieldGenerator::AttachNewSpan(Span* CurrentSpan, Span* NewSpan) const
 {
-	if (!CurrentSpan)
-	{
-		CurrentSpan = std::make_unique<Span>(*NewSpan.release());
-		return;
-	}
-
 	// They are the same Span
 	if (CurrentSpan->MaxSpanHeight == NewSpan->MaxSpanHeight && CurrentSpan->MinSpanHeight == NewSpan->MinSpanHeight)
 	{
 		// I think this should be an &= but i have problems with planes
 		CurrentSpan->bWalkable |= NewSpan->bWalkable;
-		return;
 	}
 
 	// The new span is above the current span
@@ -308,7 +307,14 @@ void FHeightFieldGenerator::AttachNewSpan(std::unique_ptr<Span>& CurrentSpan, st
 		// They are not colliding
 		if (NewSpan->MinSpanHeight > CurrentSpan->MaxSpanHeight)
 		{
-			AttachNewSpan(CurrentSpan->NextSpan, NewSpan);
+			if (CurrentSpan->NextSpan)
+			{
+				AttachNewSpan(CurrentSpan->NextSpan.Get(), NewSpan);
+			}
+			else
+			{
+				CurrentSpan->NextSpan = MakeUnique<Span>(*NewSpan);
+			}
 		}
 		// They are colliding. We should combine them
 		else
@@ -323,7 +329,7 @@ void FHeightFieldGenerator::AttachNewSpan(std::unique_ptr<Span>& CurrentSpan, st
 		// They are not colliding
 		if (NewSpan->MaxSpanHeight < CurrentSpan->MinSpanHeight)
 		{
-			NewSpan->NextSpan = std::make_unique<Span>(*CurrentSpan.release());
+			NewSpan->NextSpan = MakeUnique<Span>(*CurrentSpan);
 		}
 		// They are colliding. We should combine them
 		else
@@ -331,11 +337,11 @@ void FHeightFieldGenerator::AttachNewSpan(std::unique_ptr<Span>& CurrentSpan, st
 			CombineSpans(NewSpan, CurrentSpan);
 		}
 
-		CurrentSpan = std::make_unique<Span>(*NewSpan);
+		CurrentSpan->CopySpan(*NewSpan);
 	}
 }
 
-std::unique_ptr<Span>& FHeightFieldGenerator::CombineSpans(std::unique_ptr<Span>& LowerSpan, const std::unique_ptr<Span>& HigherSpan) const
+Span* FHeightFieldGenerator::CombineSpans(Span* LowerSpan, Span* HigherSpan) const
 {
 	// The HigherSpan ceil is above the current LowerSpawn
 	if (HigherSpan->MaxSpanHeight > LowerSpan->MaxSpanHeight)
@@ -345,16 +351,30 @@ std::unique_ptr<Span>& FHeightFieldGenerator::CombineSpans(std::unique_ptr<Span>
 
 		if (HigherSpan->NextSpan)
 		{
-			AttachNewSpan(LowerSpan->NextSpan, HigherSpan->NextSpan);
+			if (LowerSpan->NextSpan)
+			{
+				AttachNewSpan(LowerSpan->NextSpan.Get(), HigherSpan->NextSpan.Get());
+			}
+			else
+			{
+				LowerSpan->NextSpan = MakeUnique<Span>(*HigherSpan->NextSpan.Release());
+				HigherSpan->NextSpan = nullptr;
+			}
 		}
 
 		// Check if the current span needs to be combined with its next span
 		if (LowerSpan->NextSpan)
 		{
-			std::unique_ptr<Span> NextSpan = std::make_unique<Span>(*LowerSpan->NextSpan.release());
-			LowerSpan->NextSpan = NextSpan->NextSpan ? std::make_unique<Span>(*NextSpan->NextSpan.release()) : std::unique_ptr<Span>();
-
-			AttachNewSpan(LowerSpan, NextSpan);
+			Span NextSpan (*LowerSpan->NextSpan);
+			if (NextSpan.NextSpan)
+			{
+				LowerSpan->NextSpan->CopySpan(*NextSpan.NextSpan);
+			}
+			else
+			{
+				LowerSpan->NextSpan = nullptr;
+			}
+			AttachNewSpan(LowerSpan, &NextSpan);
 		}
 	}
 	// The HigherSpan ceil is in the same height of the LowerSpan

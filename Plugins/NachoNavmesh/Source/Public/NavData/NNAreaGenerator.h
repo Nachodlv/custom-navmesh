@@ -1,9 +1,6 @@
 ﻿#pragma once
 
 // NN Includes
-#include <memory>
-#include <vector>
-
 #include "NNNavMeshRenderingComp.h"
 
 class UNavigationSystemV1;
@@ -57,24 +54,29 @@ struct Span
 	Span() {}
 	Span (Span& InSpan)
 	{
-		MaxSpanHeight = InSpan.MaxSpanHeight;
-		MinSpanHeight = InSpan.MinSpanHeight;
-		bWalkable = InSpan.bWalkable;
-		if (InSpan.NextSpan)
-		{
-			NextSpan = std::make_unique<Span>(*InSpan.NextSpan.release());
-		}
+		CopySpan(InSpan);
 	}
 
 	Span(const Span& InSpan) = delete;
 
 	int32 MaxSpanHeight = INDEX_NONE;
 	int32 MinSpanHeight = INDEX_NONE;
-	std::unique_ptr<Span> NextSpan = nullptr;
+	TUniquePtr<Span> NextSpan = nullptr;
 	bool bWalkable = false;
 
 	/** Returns a readable representation of this Span */
 	FString ToString() const;
+
+	void CopySpan(Span& InSpan)
+	{
+		MaxSpanHeight = InSpan.MaxSpanHeight;
+		MinSpanHeight = InSpan.MinSpanHeight;
+		bWalkable = InSpan.bWalkable;
+		if (InSpan.NextSpan)
+		{
+			NextSpan = MakeUnique<Span>(*InSpan.NextSpan.Release());
+		}
+	}
 };
 
 /** Container of spans */
@@ -95,7 +97,7 @@ struct FNNHeightField
 	float CellSize = 0.0f;
 	float CellHeight = 0.0f;
 
-	std::vector<std::unique_ptr<Span>> Spans; // 2D array, UnitsWidth * UnitsDepth
+	TArray<TUniquePtr<Span>> Spans; // 2D array, UnitsWidth * UnitsDepth
 };
 
 /** The result of the FNNAreaGenerator */

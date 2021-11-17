@@ -90,7 +90,7 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		DebuggingInfo.TemporaryTexts.Append(Result.Value->TemporaryTexts);
 		DebuggingInfo.TemporaryLines.Append(Result.Value->TemporaryLines);
 
-		const std::vector<std::unique_ptr<Span>>& Spans = Result.Value->HeightField->Spans;
+		const TArray<TUniquePtr<Span>>& Spans = Result.Value->HeightField->Spans;
 
 		// TODO (ignacio) this can be moved to a function
 		FNavigationBounds DataSearch;
@@ -102,11 +102,11 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		const float CellSize = Result.Value->HeightField->CellSize;
 		const float CellHeight = Result.Value->HeightField->CellHeight;
 		const int32 UnitsWidth = Result.Value->HeightField->UnitsWidth;
-		for (int32 i = 0; i < Spans.size(); ++i)
+		for (int32 i = 0; i < Spans.Num(); ++i)
 		{
 			const float Y = (i / UnitsWidth) * CellSize;
 			const float X = (i % UnitsWidth) * CellSize;
-			const Span* CurrentSpan = Spans[i].get();
+			const Span* CurrentSpan = Spans[i].Get();
 			while (CurrentSpan)
 			{
 				const float MinZ = CurrentSpan->MinSpanHeight * CellHeight;
@@ -120,7 +120,7 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 				DebugBox.Color = CurrentSpan->bWalkable ? FColor::Green : FColor::Red;
 				DebuggingInfo.HeightFields.Add(MoveTemp(DebugBox));
 
-				CurrentSpan = CurrentSpan->NextSpan.get();
+				CurrentSpan = CurrentSpan->NextSpan.Get();
 			}
 		}
 	}

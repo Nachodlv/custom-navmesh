@@ -21,10 +21,10 @@ protected:
 	static bool Generate2DBoundingBoxForGeometry(TArray<FVector>& Polygon, FVector& OutMinimumPoint, FVector& OutMaximumPoint, const FBox& BoundBox);
 
 	/** Attaches the new span into the CurrentSpan */
-	void AttachNewSpan(std::unique_ptr<Span>& CurrentSpan, std::unique_ptr<Span>& NewSpan) const;
+	void AttachNewSpan(Span* CurrentSpan, Span* NewSpan) const;
 
 	/** Combines the two Spans */
-	std::unique_ptr<Span>& CombineSpans(std::unique_ptr<Span>& LowerSpan, const std::unique_ptr<Span>& HigherSpan) const;
+	Span* CombineSpans(Span* LowerSpan, Span* HigherSpan) const;
 
 	/** Creates a debug point in the world */
 	void AddDebugPoint(const FVector& Point, float Radius = 20.0f) const;
