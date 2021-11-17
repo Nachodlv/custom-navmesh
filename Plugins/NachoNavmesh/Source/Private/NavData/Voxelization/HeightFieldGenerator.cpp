@@ -1,4 +1,4 @@
-﻿#include "NavData/HeightFieldGenerator.h"
+﻿#include "NavData/Voxelization/HeightFieldGenerator.h"
 
 // UE Includes
 #include "Collision.h"

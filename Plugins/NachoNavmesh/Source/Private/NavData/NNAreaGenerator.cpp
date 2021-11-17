@@ -4,8 +4,8 @@
 #include "NavigationSystem.h"
 
 // NN Includes
-#include "NavData/HeightFieldGenerator.h"
 #include "NavData/NNNavMeshGenerator.h"
+#include "NavData/Voxelization/HeightFieldGenerator.h"
 
 FVector FNNRawGeometryElement::GetGeometryPosition(int32 Index) const
 {

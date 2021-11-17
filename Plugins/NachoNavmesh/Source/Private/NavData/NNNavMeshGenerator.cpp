@@ -2,6 +2,7 @@
 
 // NN Includes
 #include "NavData/NNNavMeshRenderingComp.h"
+#include "NavData/Voxelization/HeightFieldGenerator.h"
 
 
 FNNNavMeshGenerator::FNNNavMeshGenerator(ANNNavMesh& InNavMesh)

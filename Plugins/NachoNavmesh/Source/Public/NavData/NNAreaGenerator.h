@@ -3,6 +3,8 @@
 // NN Includes
 #include "NNNavMeshRenderingComp.h"
 
+struct FNNHeightField;
+
 class UNavigationSystemV1;
 class FNNNavMeshGenerator;
 
@@ -46,58 +48,6 @@ struct FNNGeometryCache
 
 	FNNGeometryCache() {}
 	FNNGeometryCache(const uint8* Memory);
-};
-
-/** Represents a cell that collides with a polygon */
-struct Span
-{
-	Span() {}
-	Span (Span& InSpan)
-	{
-		CopySpan(InSpan);
-	}
-
-	Span(const Span& InSpan) = delete;
-
-	int32 MaxSpanHeight = INDEX_NONE;
-	int32 MinSpanHeight = INDEX_NONE;
-	TUniquePtr<Span> NextSpan = nullptr;
-	bool bWalkable = false;
-
-	/** Returns a readable representation of this Span */
-	FString ToString() const;
-
-	void CopySpan(Span& InSpan)
-	{
-		MaxSpanHeight = InSpan.MaxSpanHeight;
-		MinSpanHeight = InSpan.MinSpanHeight;
-		bWalkable = InSpan.bWalkable;
-		if (InSpan.NextSpan)
-		{
-			NextSpan = MakeUnique<Span>(*InSpan.NextSpan.Release());
-		}
-	}
-};
-
-/** Container of spans */
-struct FNNHeightField
-{
-	FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth);
-
-	/** How spans are contained in every axis */
-	int32 UnitsWidth = 0; // X
-	int32 UnitsHeight = 0; // Z
-	int32 UnitsDepth = 0; // Y
-
-	/** Bounds */
-	FVector MinPoint;
-	FVector MaxPoint;
-
-	/** The span size */
-	float CellSize = 0.0f;
-	float CellHeight = 0.0f;
-
-	TArray<TUniquePtr<Span>> Spans; // 2D array, UnitsWidth * UnitsDepth
 };
 
 /** The result of the FNNAreaGenerator */

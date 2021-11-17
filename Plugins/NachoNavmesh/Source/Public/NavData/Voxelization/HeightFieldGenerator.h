@@ -1,11 +1,62 @@
 ﻿#pragma once
 
 // NN Includes
-#include "NNAreaGenerator.h"
+#include "NavData/NNAreaGenerator.h"
 
 struct FNNAreaGeneratorData;
 struct FNNRawGeometryElement;
-struct FNNHeightField;
+
+/** Represents a cell that collides with a polygon */
+struct Span
+{
+	Span() {}
+	Span (Span& InSpan)
+	{
+		CopySpan(InSpan);
+	}
+
+	Span(const Span& InSpan) = delete;
+
+	int32 MaxSpanHeight = INDEX_NONE;
+	int32 MinSpanHeight = INDEX_NONE;
+	TUniquePtr<Span> NextSpan = nullptr;
+	bool bWalkable = false;
+
+	/** Returns a readable representation of this Span */
+	FString ToString() const;
+
+	void CopySpan(Span& InSpan)
+	{
+		MaxSpanHeight = InSpan.MaxSpanHeight;
+		MinSpanHeight = InSpan.MinSpanHeight;
+		bWalkable = InSpan.bWalkable;
+		if (InSpan.NextSpan)
+		{
+			NextSpan = MakeUnique<Span>(*InSpan.NextSpan.Release());
+		}
+	}
+};
+
+/** Container of spans */
+struct FNNHeightField
+{
+	FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth);
+
+	/** How spans are contained in every axis */
+	int32 UnitsWidth = 0; // X
+	int32 UnitsHeight = 0; // Z
+	int32 UnitsDepth = 0; // Y
+
+	/** Bounds */
+	FVector MinPoint;
+	FVector MaxPoint;
+
+	/** The span size */
+	float CellSize = 0.0f;
+	float CellHeight = 0.0f;
+
+	TArray<TUniquePtr<Span>> Spans; // 2D array, UnitsWidth * UnitsDepth
+};
 
 /** Generates a HeightField withing given bounds */
 class FHeightFieldGenerator
