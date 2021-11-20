@@ -4,6 +4,7 @@
 #include "NNNavMeshRenderingComp.h"
 
 struct FNNHeightField;
+struct FNNOpenHeightField;
 
 class UNavigationSystemV1;
 class FNNNavMeshGenerator;
@@ -57,7 +58,9 @@ struct FNNAreaGeneratorData
 	// tile's geometry: without voxel cache
 	TArray<FNNRawGeometryElement> RawGeometry;
 
-	FNNHeightField* HeightField;
+	TUniquePtr<FNNHeightField> HeightField = nullptr;
+
+	TUniquePtr<FNNOpenHeightField> OpenHeightField = nullptr;
 
 	/** BoxSpheres used for debugging */
 	TArray<FBoxSphereBounds> TemporaryBoxSpheres;
@@ -67,6 +70,13 @@ struct FNNAreaGeneratorData
 
 	/** Texts used for debugging */
 	TArray<FNNNavMeshSceneProxyData::FDebugText> TemporaryTexts;
+
+	/** Creates a debug point in the world */
+	void AddDebugPoint(const FVector& Point, float Radius = 20.0f);
+	/** Creates a debug text in the world */
+	void AddDebugText(const FVector& Location, const FString& Text);
+	/** Creates a debug line in the world */
+	void AddDebugLine(const FVector& Start, const FVector& End);
 };
 
 /** Calculates the nav mesh for a specific FNavigationBounds */

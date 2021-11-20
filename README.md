@@ -18,7 +18,9 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - [X] Footprint the geometry
   - [X] Implement heightfields
   - [X] Identify walkable spans
-  - [ ] Implement open heightfields
+  - [ ] Implement an open heightfield
+    - [X] Create the open spans with the solid spans
+    - [ ] Collect the open spans walkable neighbours
 - [ ] Region Generation
 - [ ] Contour Generation
 - [ ] Convex Polygon Generation

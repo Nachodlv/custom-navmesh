@@ -11,7 +11,27 @@
 
 #define NN_LOG_SPAN_ATTACHMENT 0
 
-FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeometryElement>& RawGeometry, const FVector& BoundMinPoint, const FVector& BoundMaxPoint, float CellSize, float CellHeight, float WalkableAngle, float AgentHeight, float MinLedgeHeight) const
+FString Span::ToString() const
+{
+	return FString::Printf(TEXT("(%d, %d, %s)%s"),
+		MinSpanHeight,
+		MaxSpanHeight,
+		bWalkable ? TEXT("w") : TEXT("nw"),
+		NextSpan ? *FString::Printf(TEXT("->%s"), *NextSpan->ToString()) : *FString());
+}
+
+FNNHeightField::FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth)
+	: UnitsWidth(InUnitsWidth), UnitsHeight(InUnitsHeight), UnitsDepth(InUnitsDepth)
+{
+	const int32 SpansLength = InUnitsWidth * InUnitsDepth;
+	Spans.Reserve(SpansLength);
+	for (int32 i = 0; i < SpansLength; ++i)
+	{
+		Spans.Add(nullptr);
+	}
+}
+
+void FHeightFieldGenerator::InitializeHeightField(FNNHeightField& OutHeightField, TArray<FNNRawGeometryElement>& RawGeometry, const FVector& BoundMinPoint, const FVector& BoundMaxPoint, float CellSize, float CellHeight, float WalkableAngle, float AgentHeight, float MinLedgeHeight) const
 {
 	// https://en.wikipedia.org/wiki/Sutherland%E2%80%93Hodgman_algorithm
 	// Clip polygons in heightfields
@@ -21,11 +41,11 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 	const int32 YHeightFieldNum = FMath::CeilToInt((BoundMaxPoint.Y - BoundMinPoint.Y) / CellSize);
 	const int32 ZHeightFieldNum = FMath::CeilToInt((BoundMaxPoint.Z - BoundMinPoint.Z) / CellHeight);
 
-	FNNHeightField* Field = new FNNHeightField(XHeightFieldNum, ZHeightFieldNum, YHeightFieldNum);
-	Field->CellHeight = CellHeight;
-	Field->CellSize = CellSize;
-	Field->MaxPoint = BoundMaxPoint;
-	Field->MinPoint = BoundMinPoint;
+	OutHeightField = FNNHeightField(XHeightFieldNum, ZHeightFieldNum, YHeightFieldNum);
+	OutHeightField.CellHeight = CellHeight;
+	OutHeightField.CellSize = CellSize;
+	OutHeightField.MaxPoint = BoundMaxPoint;
+	OutHeightField.MinPoint = BoundMinPoint;
 
 	const float WalkableRadians = FMath::DegreesToRadians(WalkableAngle);
 
@@ -41,7 +61,7 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 			FVector PolygonNormal = FNNNavMeshHelper::CalculatePolygonNormal(Polygon);
 
 			FVector PolygonCenter = UKismetMathLibrary::GetVectorArrayAverage(Polygon);
-			// AddDebugLine(PolygonCenter, PolygonCenter + PolygonNormal * 50.0f);
+			// AreaGeneratorData.AddDebugLine(PolygonCenter, PolygonCenter + PolygonNormal * 50.0f);
 
 			const bool bPolygonWalkable  = IsPolygonWalkable(PolygonNormal, WalkableRadians);
 
@@ -77,7 +97,7 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 							NewSpan.MinSpanHeight = k;
 
 							// Add the new span in the HeightField
-							Span* CurrentSpan = Field->Spans[i + j * XHeightFieldNum].Get();
+							Span* CurrentSpan = OutHeightField.Spans[i + j * XHeightFieldNum].Get();
 #if WITH_EDITOR && NN_LOG_SPAN_ATTACHMENT
 							UE_LOG(LogTemp, Warning, TEXT("----------"));
 							if (CurrentSpan)
@@ -91,10 +111,10 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 							}
 							else
 							{
-								Field->Spans[i + j * XHeightFieldNum] = MakeUnique<Span>(NewSpan);
+								OutHeightField.Spans[i + j * XHeightFieldNum] = MakeUnique<Span>(NewSpan.MaxSpanHeight, NewSpan.MinSpanHeight, NewSpan.bWalkable);
 							}
-							// AddDebugText(Cell.GetCenter(), FString::FromInt(i + j * XHeightFieldNum));
-							// AddDebugText(Cell.GetCenter(), FString::Printf(TEXT("(%d, %d)"), i , j));
+							// AreaGeneratorData.AddDebugText(Cell.GetCenter(), FString::FromInt(i + j * XHeightFieldNum));
+							// AreaGeneratorData.AddDebugText(Cell.GetCenter(), FString::Printf(TEXT("(%d, %d)"), i , j));
 #if WITH_EDITOR && NN_LOG_SPAN_ATTACHMENT
 							UE_LOG(LogTemp, Warning, TEXT("Result: %s"), *Field->Spans[i + j * XHeightFieldNum]->ToString())
 #endif
@@ -105,39 +125,26 @@ FNNHeightField* FHeightFieldGenerator::InitializeHeightField(TArray<FNNRawGeomet
 		}
 	}
 
-	for (int32 i = 0; i < Field->Spans.Num(); ++i)
+	for (int32 i = 0; i < OutHeightField.Spans.Num(); ++i)
 	{
-		Span* CurrentSpan = Field->Spans[i].Get();
+		Span* CurrentSpan = OutHeightField.Spans[i].Get();
 		while (CurrentSpan)
 		{
-			const int32 Y = (i / Field->UnitsWidth);
-			const int32 X = (i % Field->UnitsWidth);
-			CurrentSpan->bWalkable = IsSpanWalkable(Field, X, Y, CurrentSpan, AgentHeight, MinLedgeHeight);
+			const int32 Y = (i / OutHeightField.UnitsWidth);
+			const int32 X = (i % OutHeightField.UnitsWidth);
+			CurrentSpan->bWalkable = IsSpanWalkable(OutHeightField, X, Y, CurrentSpan, AgentHeight, MinLedgeHeight);
 			CurrentSpan = CurrentSpan->NextSpan.Get();
 		}
 	}
-
-	return Field;
 }
 
 bool FHeightFieldGenerator::IsPolygonWalkable(const FVector& PolygonNormal, float MaxWalkableRadians) const
 {
-	// const FVector FloorZAxis = PolygonNormal;
-	// const FVector FloorXAxis = FVector::RightVector ^ FloorZAxis;
-	// const FVector FloorYAxis = FloorZAxis ^ FloorXAxis;
-	// const float Pitch = FMath::Acos(FloorXAxis | FVector::UpVector);
-	// const float Roll = FMath::Acos(FloorYAxis | FVector::UpVector);
-	//
-	// UE_LOG(LogTemp, Warning, TEXT("Pitch: %f, Rolls :%f"), Pitch, Roll);
-	//
-	// return Pitch > MaxWalkableRadians && Roll > MaxWalkableRadians;
-
 	const float Rotation = FMath::Acos(FVector::DotProduct(PolygonNormal, FVector::UpVector));
-
 	return Rotation < MaxWalkableRadians;
 }
 
-bool FHeightFieldGenerator::IsSpanWalkable(const FNNHeightField* HeightField, int32 XIndex, int32 YIndex, const Span* InSpan, float  AgentHeight, float MinLedgeHeight) const
+bool FHeightFieldGenerator::IsSpanWalkable(const FNNHeightField& HeightField, int32 XIndex, int32 YIndex, const Span* InSpan, float  AgentHeight, float MinLedgeHeight) const
 {
 	if (!InSpan->bWalkable)
 	{
@@ -149,7 +156,7 @@ bool FHeightFieldGenerator::IsSpanWalkable(const FNNHeightField* HeightField, in
 	{
 		const int32 MaxSpanHeight = InSpan->MaxSpanHeight;
 		const int32 MinNextSpanHeight = InSpan->NextSpan->MinSpanHeight;
-		const float SpaceBetweenSpans = (MinNextSpanHeight - MaxSpanHeight) * HeightField->CellHeight;
+		const float SpaceBetweenSpans = (MinNextSpanHeight - MaxSpanHeight) * HeightField.CellHeight;
 		if (SpaceBetweenSpans < AgentHeight)
 		{
 			return false;
@@ -157,7 +164,7 @@ bool FHeightFieldGenerator::IsSpanWalkable(const FNNHeightField* HeightField, in
 	}
 
 	// Check if the span is a ledge by checking the height of its neighbours
-	const TArray<TUniquePtr<Span>>& Spans = HeightField->Spans;
+	const TArray<TUniquePtr<Span>>& Spans = HeightField.Spans;
 	TArray<Span*> Neighbours = GetSpanNeighbours(HeightField, XIndex, YIndex, InSpan);
 
 	// UE_LOG(LogTemp, Warning, TEXT("\n---------"));
@@ -170,11 +177,11 @@ bool FHeightFieldGenerator::IsSpanWalkable(const FNNHeightField* HeightField, in
 		float HeightDifference = 0.0f;
 		if (Neighbour)
 		{
-			HeightDifference = FMath::Abs(Neighbour->MaxSpanHeight - InSpan->MaxSpanHeight) * HeightField->CellHeight;
+			HeightDifference = FMath::Abs(Neighbour->MaxSpanHeight - InSpan->MaxSpanHeight) * HeightField.CellHeight;
 		}
 		else
 		{
-			HeightDifference = InSpan->MaxSpanHeight * HeightField->CellHeight;
+			HeightDifference = InSpan->MaxSpanHeight * HeightField.CellHeight;
 		}
 		if (HeightDifference > MinLedgeHeight)
 		{
@@ -188,25 +195,25 @@ bool FHeightFieldGenerator::IsSpanWalkable(const FNNHeightField* HeightField, in
 }
 
 
-TArray<Span*> FHeightFieldGenerator::GetSpanNeighbours(const FNNHeightField* HeightField, int32 XIndex, int32 YIndex, const Span* CurrentSpan) const
+TArray<Span*> FHeightFieldGenerator::GetSpanNeighbours(const FNNHeightField& HeightField, int32 XIndex, int32 YIndex, const Span* CurrentSpan) const
 {
 	TArray<int32> NeighboursIndexes;
 	NeighboursIndexes.Init(INDEX_NONE, 4);
-	if (XIndex < HeightField->UnitsDepth - 1)
+	if (XIndex < HeightField.UnitsDepth - 1)
 	{
-		NeighboursIndexes[0] = XIndex + 1 + YIndex * HeightField->UnitsWidth;
+		NeighboursIndexes[0] = XIndex + 1 + YIndex * HeightField.UnitsWidth;
 	}
 	if (XIndex >= 1)
 	{
-		NeighboursIndexes[1] = XIndex - 1 + YIndex * HeightField->UnitsWidth;
+		NeighboursIndexes[1] = XIndex - 1 + YIndex * HeightField.UnitsWidth;
 	}
-	if (YIndex < HeightField->UnitsDepth - 1)
+	if (YIndex < HeightField.UnitsDepth - 1)
 	{
-		NeighboursIndexes[2] = XIndex + (YIndex + 1) * HeightField->UnitsWidth;
+		NeighboursIndexes[2] = XIndex + (YIndex + 1) * HeightField.UnitsWidth;
 	}
 	if (YIndex >= 1)
 	{
-		NeighboursIndexes[3] = XIndex + (YIndex - 1) * HeightField->UnitsWidth;
+		NeighboursIndexes[3] = XIndex + (YIndex - 1) * HeightField.UnitsWidth;
 	}
 	TArray<Span*> Neighbours;
 	Neighbours.Init(nullptr, 4);
@@ -216,9 +223,9 @@ TArray<Span*> FHeightFieldGenerator::GetSpanNeighbours(const FNNHeightField* Hei
 
 		// If its invalid it means the span is in the border of the HeightField
 		// Should we consider it as ledge?
-		if (NeighbourIndex >= 0 && NeighbourIndex < HeightField->Spans.Num())
+		if (NeighbourIndex >= 0 && NeighbourIndex < HeightField.Spans.Num())
 		{
-			Span* BestNeighbourSpan = HeightField->Spans[NeighbourIndex].Get();
+			Span* BestNeighbourSpan = HeightField.Spans[NeighbourIndex].Get();
 			if (!BestNeighbourSpan)
 			{
 				continue;
@@ -385,20 +392,3 @@ Span* FHeightFieldGenerator::CombineSpans(Span* LowerSpan, Span* HigherSpan) con
 
 	return LowerSpan;
 }
-
-void FHeightFieldGenerator::AddDebugPoint(const FVector& Point, float Radius) const
-{
-	FBoxSphereBounds PointToDebug = FBoxSphereBounds(FSphere(Point, Radius));
-	AreaGeneratorData.TemporaryBoxSpheres.Add(MoveTemp(PointToDebug));
-}
-
-void FHeightFieldGenerator::AddDebugText(const FVector& Location, const FString& Text) const
-{
-	AreaGeneratorData.TemporaryTexts.Emplace(Location, Text);
-}
-
-void FHeightFieldGenerator::AddDebugLine(const FVector& Start, const FVector& End) const
-{
-	AreaGeneratorData.TemporaryLines.Emplace(Start, End, FColor::Blue, 2.0f);
-}
-

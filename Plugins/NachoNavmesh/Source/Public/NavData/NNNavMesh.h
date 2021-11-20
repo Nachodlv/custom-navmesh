@@ -48,15 +48,23 @@ public:
 
 	/** Whether it should draw the geometry indices */
 	UPROPERTY(EditAnywhere, Category = "NN|Debug")
-	bool bDrawGeometry = true;
+	bool bDrawGeometry = false;
 
 	/** Whether it should draw points in the element vertex and lines between them */
 	UPROPERTY(EditAnywhere, Category = "NN|Debug")
-	bool bDrawPolygons = true;
+	bool bDrawPolygons = false;
 
 	/** Whether it should draw the spans from the HeightField */
 	UPROPERTY(EditAnywhere, Category = "NN|Debug")
-	bool bDrawHeightField = true;
+	bool bDrawHeightField = false;
+
+	/** Whether it should draw the spans from the OpenHeightField */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug")
+	bool bDrawOpenHeightField = false;
+
+	/** Whether it should only draw the floor of the OpenHeightField's spans */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug", meta = (EditCondition = "bDrawOpenHeightField"))
+	bool bDrawOpenHeightFieldFloor = false;
 
 	/** Size of the tallest agent that will path with this navmesh. */
 	UPROPERTY(EditAnywhere, Category = "NN|Config")

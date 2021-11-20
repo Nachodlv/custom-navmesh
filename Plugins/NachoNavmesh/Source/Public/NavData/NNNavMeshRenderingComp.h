@@ -114,7 +114,9 @@ struct FNNNavMeshDebuggingInfo
 	/** The geometry vertices */
 	TArray<FNNRawGeometryElement> RawGeometryToDraw;
 	/** The HeightField spans represented as boxes */
-	TArray<HeightFieldDebugBox> HeightFields;
+	TArray<HeightFieldDebugBox> HeightField;
+	/** The OpenHeightField spans represented as boxes */
+	TArray<HeightFieldDebugBox> OpenHeightField;
 	/** Box spheres for debugging. No specific usage */
 	TArray<FBoxSphereBounds> TemporaryBoxSpheres;
 	/** Texts for debugging. No specific usage */

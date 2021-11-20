@@ -109,10 +109,27 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 		// Gather the HeightField spans
 		if (NavMesh->bDrawHeightField)
 		{
-			const FColor HeightFieldColor = FColor::Red;
-			for (const FNNNavMeshDebuggingInfo::HeightFieldDebugBox& HeightField : DebuggingInfo.HeightFields)
+			for (const FNNNavMeshDebuggingInfo::HeightFieldDebugBox& HeightField : DebuggingInfo.HeightField)
 			{
 				FDebugRenderSceneProxy::FDebugBox Box (HeightField.Box, HeightField.Color);
+				AuxBoxes.Add(MoveTemp(Box));
+			}
+		}
+
+		// Gather the OpenHeightField spans
+		if (NavMesh->bDrawOpenHeightField)
+		{
+			for (const FNNNavMeshDebuggingInfo::HeightFieldDebugBox& OpenSpan : DebuggingInfo.OpenHeightField)
+			{
+				FDebugRenderSceneProxy::FDebugBox Box = FDebugRenderSceneProxy::FDebugBox(OpenSpan.Box, OpenSpan.Color);
+				if (NavMesh->bDrawOpenHeightFieldFloor)
+				{
+					const FVector MinPoint = OpenSpan.Box.Min;
+					FVector MaxPoint = OpenSpan.Box.Max;
+					MaxPoint.Z = MinPoint.Z + 1.0f;
+					FBox CeilBox = FBox(MinPoint, MaxPoint);
+					Box = FDebugRenderSceneProxy::FDebugBox(CeilBox, OpenSpan.Color);
+				}
 				AuxBoxes.Add(MoveTemp(Box));
 			}
 		}

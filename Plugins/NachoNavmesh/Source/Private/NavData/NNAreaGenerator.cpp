@@ -6,6 +6,7 @@
 // NN Includes
 #include "NavData/NNNavMeshGenerator.h"
 #include "NavData/Voxelization/HeightFieldGenerator.h"
+#include "NavData/Voxelization/OpenHeightFieldGenerator.h"
 
 FVector FNNRawGeometryElement::GetGeometryPosition(int32 Index) const
 {
@@ -19,34 +20,30 @@ FNNGeometryCache::FNNGeometryCache(const uint8* Memory)
 	Indices = (int32*)(Memory + sizeof(FNNGeometryCache) + (sizeof(float) * Header.NumVerts * 3));
 }
 
-FString Span::ToString() const
-{
-	return FString::Printf(TEXT("(%d, %d, %s)%s"),
-		MinSpanHeight,
-		MaxSpanHeight,
-		bWalkable ? TEXT("w") : TEXT("nw"),
-		NextSpan ? *FString::Printf(TEXT("->%s"), *NextSpan->ToString()) : *FString());
-}
-
-FNNHeightField::FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth)
-	: UnitsWidth(InUnitsWidth), UnitsHeight(InUnitsHeight), UnitsDepth(InUnitsDepth)
-{
-	const int32 SpansLength = InUnitsWidth * InUnitsDepth;
-	Spans.Reserve(SpansLength);
-	for (int32 i = 0; i < SpansLength; ++i)
-	{
-		Spans.Add(nullptr);
-	}
-}
-
 FNNAreaGeneratorData::~FNNAreaGeneratorData()
 {
-	delete HeightField;
 	HeightField = nullptr;
+	OpenHeightField = nullptr;
 	TemporaryBoxSpheres.Reset();
 	RawGeometry.Reset();
 	TemporaryLines.Reset();
 	TemporaryTexts.Reset();
+}
+
+void FNNAreaGeneratorData::AddDebugPoint(const FVector& Point, float Radius)
+{
+	FBoxSphereBounds PointToDebug = FBoxSphereBounds(FSphere(Point, Radius));
+	TemporaryBoxSpheres.Add(MoveTemp(PointToDebug));
+}
+
+void FNNAreaGeneratorData::AddDebugText(const FVector& Location, const FString& Text)
+{
+	TemporaryTexts.Emplace(Location, Text);
+}
+
+void FNNAreaGeneratorData::AddDebugLine(const FVector& Start, const FVector& End)
+{
+	TemporaryLines.Emplace(Start, End, FColor::Blue, 2.0f);
 }
 
 FNNAreaGenerator::FNNAreaGenerator(FNNNavMeshGenerator* InParentGenerator, const FNavigationBounds& Bounds)
@@ -73,8 +70,16 @@ void FNNAreaGenerator::DoWork()
 	const FVector& MinimumPoint = AreaBounds.AreaBox.Min;
 	const FVector& MaximumPoint = AreaBounds.AreaBox.Max;
 
-	const FHeightFieldGenerator Generator (*AreaGeneratorData);
-	AreaGeneratorData->HeightField = Generator.InitializeHeightField(AreaGeneratorData->RawGeometry, MinimumPoint, MaximumPoint, HeightFieldSize, HeightFieldHeight, NavMesh->WalkableSlopeDegrees, NavMesh->AgentHeight, NavMesh->MaxLedgeHeight);
+	const FHeightFieldGenerator HeightFieldGenerator (*AreaGeneratorData);
+	AreaGeneratorData->HeightField = MakeUnique<FNNHeightField>();
+	HeightFieldGenerator.InitializeHeightField(*AreaGeneratorData->HeightField ,
+		AreaGeneratorData->RawGeometry, MinimumPoint, MaximumPoint, HeightFieldSize,
+		HeightFieldHeight, NavMesh->WalkableSlopeDegrees, NavMesh->AgentHeight, NavMesh->MaxLedgeHeight);
+
+
+	const FOpenHeightFieldGenerator OpenHeightFieldGenerator (*AreaGeneratorData);
+	AreaGeneratorData->OpenHeightField = MakeUnique<FNNOpenHeightField>();
+	OpenHeightFieldGenerator.GenerateOpenHeightField(*AreaGeneratorData->OpenHeightField, *AreaGeneratorData->HeightField);
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)

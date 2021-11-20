@@ -14,13 +14,15 @@ struct Span
 	{
 		CopySpan(InSpan);
 	}
+	Span(int32 InMaxSpanHeight, int32 InMinSpanHeight, bool bInWalkable)
+		: MaxSpanHeight(InMaxSpanHeight), MinSpanHeight(InMinSpanHeight), bWalkable(bInWalkable) {}
 
 	Span(const Span& InSpan) = delete;
 
 	int32 MaxSpanHeight = INDEX_NONE;
 	int32 MinSpanHeight = INDEX_NONE;
-	TUniquePtr<Span> NextSpan = nullptr;
 	bool bWalkable = false;
+	TUniquePtr<Span> NextSpan = nullptr;
 
 	/** Returns a readable representation of this Span */
 	FString ToString() const;
@@ -40,6 +42,7 @@ struct Span
 /** Container of spans */
 struct FNNHeightField
 {
+	FNNHeightField() {}
 	FNNHeightField(int32 InUnitsWidth, int32 InUnitsHeight, int32 InUnitsDepth);
 
 	/** How spans are contained in every axis */
@@ -65,7 +68,9 @@ public:
 	FHeightFieldGenerator(FNNAreaGeneratorData& InAreaGeneratorData) : AreaGeneratorData(InAreaGeneratorData) {}
 
 	/** Creates a new HeightField with the given parameters */
-	FNNHeightField* InitializeHeightField(TArray<FNNRawGeometryElement>& RawGeometry, const FVector& BoundMinPoint, const FVector& BoundMaxPoint, float CellSize, float CellHeight, float WalkableAngle, float AgentHeight, float MinLedgeHeight) const;
+	void InitializeHeightField(FNNHeightField& OutHeightField, TArray<FNNRawGeometryElement>& RawGeometry,
+		const FVector& BoundMinPoint, const  FVector& BoundMaxPoint, float CellSize, float CellHeight,
+		float WalkableAngle, float AgentHeight, float MinLedgeHeight) const;
 
 protected:
 	/** Creates a 2D bounding box that contains the Polygon */
@@ -77,23 +82,16 @@ protected:
 	/** Combines the two Spans */
 	Span* CombineSpans(Span* LowerSpan, Span* HigherSpan) const;
 
-	/** Creates a debug point in the world */
-	void AddDebugPoint(const FVector& Point, float Radius = 20.0f) const;
-
-	/** Creates a debug text in the world */
-	void AddDebugText(const FVector& Location, const FString& Text) const;
-
-	/** Creates a debug line in the world */
-	void AddDebugLine(const FVector& Start, const FVector& End) const;
-
 	/** Returns whether the Polygon provided is walkable */
 	bool IsPolygonWalkable(const FVector& PolygonNormal, float MaxWalkableRadians) const;
 
 	/** Returns whether the span provided is walkable */
-	bool IsSpanWalkable(const FNNHeightField* HeightField, int32 XIndex, int32 YIndex, const Span* InSpan, float AgentHeight, float MinLedgeHeight) const;
+	bool IsSpanWalkable(const FNNHeightField& HeightField, int32 XIndex, int32 YIndex, const Span* InSpan,
+		float AgentHeight, float MinLedgeHeight) const;
 
 	/** Returns the neighbours of the Span provided */
-	TArray<Span*> GetSpanNeighbours(const FNNHeightField* HeightField, int32 XIndex, int32 YIndex, const Span* CurrentSpan) const;
+	TArray<Span*> GetSpanNeighbours(const FNNHeightField& HeightField, int32 XIndex, int32 YIndex,
+		const Span* CurrentSpan) const;
 private:
 	/** Data from the AreaGenerator that created this class. Used to debug points and texts in the world */
 	FNNAreaGeneratorData& AreaGeneratorData;

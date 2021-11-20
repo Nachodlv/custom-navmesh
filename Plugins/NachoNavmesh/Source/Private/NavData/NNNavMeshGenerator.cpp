@@ -3,6 +3,7 @@
 // NN Includes
 #include "NavData/NNNavMeshRenderingComp.h"
 #include "NavData/Voxelization/HeightFieldGenerator.h"
+#include "NavData/Voxelization/OpenHeightFieldGenerator.h"
 
 
 FNNNavMeshGenerator::FNNNavMeshGenerator(ANNNavMesh& InNavMesh)
@@ -119,9 +120,34 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 				FNNNavMeshDebuggingInfo::HeightFieldDebugBox DebugBox;
 				DebugBox.Box = FBox(MinPoint, MaxPoint);
 				DebugBox.Color = CurrentSpan->bWalkable ? FColor::Green : FColor::Red;
-				DebuggingInfo.HeightFields.Add(MoveTemp(DebugBox));
+				DebuggingInfo.HeightField.Add(MoveTemp(DebugBox));
 
 				CurrentSpan = CurrentSpan->NextSpan.Get();
+			}
+		}
+
+		// Converts the OpenHeightField Spans into FBoxes
+		TArray<TUniquePtr<FNNOpenSpan>>& OpenSpans = Result.Value->OpenHeightField->Spans;
+		float MaxHeight = Result.Value->OpenHeightField->Bounds.Max.Z;
+		for (int32 i = 0; i < OpenSpans.Num(); ++i)
+		{
+			FNNOpenSpan* OpenSpan = OpenSpans[i].Get();
+			while (OpenSpan)
+			{
+				const int32 X = OpenSpan->X * CellSize;
+				const int32 Y = OpenSpan->Y * CellSize;
+				const float MinZ = OpenSpan->MinHeight * CellHeight;
+				const float MaxZ = OpenSpan->MaxHeight != INDEX_NONE ? OpenSpan->MaxHeight * CellHeight : MaxHeight;
+				FVector MinPoint = BoundMinPoint;
+				MinPoint += FVector(X, Y, MinZ);
+				FVector MaxPoint = BoundMinPoint + FVector(X + CellSize, Y + CellSize, MaxZ);
+
+				FNNNavMeshDebuggingInfo::HeightFieldDebugBox DebugBox;
+				DebugBox.Box = FBox(MinPoint, MaxPoint);
+				DebugBox.Color = FColor::Green;
+				DebuggingInfo.OpenHeightField.Add(MoveTemp(DebugBox));
+
+				OpenSpan = OpenSpan->NextOpenSpan.Get();
 			}
 		}
 	}
