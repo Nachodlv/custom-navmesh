@@ -22,6 +22,12 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
     - [X] Create the open spans with the solid spans
     - [X] Collect the open spans walkable neighbours
 - [ ] Region Generation
+  - [X] Implement the water shed algorithm
+  - [X] Filter small regions
+  - [ ] Clear null region borders
 - [ ] Contour Generation
 - [ ] Convex Polygon Generation
 - [ ] Detail Mesh Generation
+
+## Improves
+- [ ] Refactor the distance field generation

@@ -1,8 +1,23 @@
 ﻿#include "NavData/Voxelization/OpenHeightFieldGenerator.h"
 
+// NN Includes
 #include "NavData/Voxelization/HeightFieldGenerator.h"
 
 #define DEBUG_OPENHEIGHTFIELD 0
+
+namespace
+{
+	void GetNeighboursToFlood(FNNOpenSpan* Span, int32 CurrentWaterLevel, TArray<FNNOpenSpan*>& SpansToFlood)
+	{
+		for (FNNOpenSpan* Neighbour : Span->Neighbours)
+		{
+			if (Neighbour && Neighbour->RegionID == INDEX_NONE && Neighbour->EdgeDistance == CurrentWaterLevel)
+			{
+				SpansToFlood.Add(Neighbour);
+			}
+		}
+	}
+}
 
 FNNOpenHeightField::FNNOpenHeightField(int32 InUnitsWidth, int32 InUnitsDepth, int32 InUnitsHeight)
 	: UnitsWidth(InUnitsWidth), UnitsDepth(InUnitsDepth), UnitsHeight(InUnitsHeight)
@@ -15,7 +30,7 @@ FNNOpenHeightField::FNNOpenHeightField(int32 InUnitsWidth, int32 InUnitsDepth, i
 	}
 }
 
-void FOpenHeightFieldGenerator::GenerateOpenHeightField(FNNOpenHeightField& OutOpenHeightField, const FNNHeightField& SolidHeightField, float MaxLedgeHeight, float AgentHeight) const
+void FOpenHeightFieldGenerator::GenerateOpenHeightField(FNNOpenHeightField& OutOpenHeightField, const FNNHeightField& SolidHeightField, float MaxLedgeHeight, float AgentHeight, float MinRegionSize) const
 {
 	OutOpenHeightField = FNNOpenHeightField(SolidHeightField.UnitsWidth, SolidHeightField.UnitsDepth, SolidHeightField.UnitsHeight);
 	OutOpenHeightField.CellHeight = SolidHeightField.CellHeight;
@@ -63,6 +78,7 @@ void FOpenHeightFieldGenerator::GenerateOpenHeightField(FNNOpenHeightField& OutO
 		}
 	}
 
+	int32 MaxEdgeDistance = INDEX_NONE;
 	// Calculate distance to nearest edge
 	for (int32 i = 0; i < OutOpenHeightField.Spans.Num(); ++i)
 	{
@@ -71,6 +87,7 @@ void FOpenHeightFieldGenerator::GenerateOpenHeightField(FNNOpenHeightField& OutO
 		{
 			TArray<const FNNOpenSpan*> VisitedSpans;
 			OpenSpan->EdgeDistance = GetOpenSpanEdgeDistance(OpenSpan);
+			MaxEdgeDistance = FMath::Max(OpenSpan->EdgeDistance, MaxEdgeDistance);
 
 #if DEBUG_OPENHEIGHTFIELD
 			// Debug distances
@@ -79,6 +96,11 @@ void FOpenHeightFieldGenerator::GenerateOpenHeightField(FNNOpenHeightField& OutO
 			OpenSpan = OpenSpan->NextOpenSpan.Get();
 		}
 	}
+	OutOpenHeightField.SpanMaxEdgeDistance = MaxEdgeDistance;
+
+
+	const int32 MinSpansQuantity = FMath::CeilToInt(MinRegionSize / OutOpenHeightField.CellSize);
+	CreateRegions(OutOpenHeightField, MinSpansQuantity);
 }
 
 void FOpenHeightFieldGenerator::SetOpenSpanNeighbours(FNNOpenHeightField& OutOpenHeightField, const TArray<FVector2D>& PossibleNeighbours, FNNOpenSpan* OpenSpan, float MaxLedgeHeight, float AgentHeight) const
@@ -132,6 +154,157 @@ void FOpenHeightFieldGenerator::SetOpenSpanNeighbours(FNNOpenHeightField& OutOpe
 			AreaGeneratorData.AddDebugLine(CurrentSpanLocation, NeighbourLocation);
 		}
 #endif // DEBUG_OPENHEIGHTFIELD_DISTANCE
+	}
+}
+
+void FOpenHeightFieldGenerator::CreateRegions(FNNOpenHeightField& OpenHeightField, int32 MinSpansForRegions) const
+{
+	TArray<FNNRegion>& Regions = OpenHeightField.Regions;
+	for (int32 WaterLevel = OpenHeightField.SpanMaxEdgeDistance; WaterLevel > 0; --WaterLevel)
+	{
+		// Grow regions
+		GrowRegions(OpenHeightField, WaterLevel);
+
+		// Create new regions
+		for (int32 i = 0; i < OpenHeightField.Spans.Num(); ++i)
+		{
+			FNNOpenSpan* OpenSpan = OpenHeightField.Spans[i].Get();
+			while (OpenSpan)
+			{
+				if (OpenSpan->EdgeDistance == WaterLevel && OpenSpan->RegionID == INDEX_NONE)
+				{
+					FNNRegion& NewRegion = Regions.Emplace_GetRef(FNNRegion(Regions.Num() + 1));
+					FloodRegion(OpenSpan, NewRegion, WaterLevel);
+				}
+				OpenSpan = OpenSpan->NextOpenSpan.Get();
+			}
+		}
+	}
+
+	FilterSmallRegions(Regions, MinSpansForRegions);
+}
+
+void FOpenHeightFieldGenerator::GrowRegions(FNNOpenHeightField& OpenHeightField, int32 CurrentWaterLevel) const
+{
+	TArray<FNNRegion>& Regions = OpenHeightField.Regions;
+	TMap<int32, TArray<FNNOpenSpan*>> SpansToFloodByRegion;
+
+	for (int32 i = 0; i < Regions.Num(); ++i)
+	{
+		FNNRegion& Region = Regions[i];
+		TArray<FNNOpenSpan*> SpansToFlood;
+		for (FNNOpenSpan* Span : Region.Spans)
+		{
+			// Was the Span just flooded?
+			if (Span->EdgeDistance == CurrentWaterLevel + 1)
+			{
+				TArray<FNNOpenSpan*> NeighboursToFlood;
+				GetNeighboursToFlood(Span, CurrentWaterLevel, NeighboursToFlood);
+				SpansToFlood.Append(NeighboursToFlood);
+			}
+		}
+		SpansToFloodByRegion.Add(Region.ID, SpansToFlood);
+	}
+
+	while (SpansToFloodByRegion.Num() > 0)
+	{
+		// We fill the Regions equally
+		for (FNNRegion& Region : Regions)
+		{
+			TArray<FNNOpenSpan*>* SpansToFloodPointer = SpansToFloodByRegion.Find(Region.ID);
+			if (!SpansToFloodPointer)
+			{
+				continue;
+			}
+
+			TArray<FNNOpenSpan*> NextSpansToFlood;
+			for (FNNOpenSpan* Span : *SpansToFloodPointer)
+			{
+				if (Span->RegionID == INDEX_NONE)
+				{
+					Span->RegionID = Region.ID;
+					Region.Spans.Add(Span);
+					TArray<FNNOpenSpan*> NeighboursToFlood;
+					GetNeighboursToFlood(Span, CurrentWaterLevel, NeighboursToFlood);
+					NextSpansToFlood.Append(NeighboursToFlood);
+				}
+			}
+			if (NextSpansToFlood.Num() == 0)
+			{
+				SpansToFloodByRegion.Remove(Region.ID);
+			}
+			else
+			{
+				SpansToFloodByRegion.Add(Region.ID, NextSpansToFlood);
+			}
+		}
+	}
+}
+
+void FOpenHeightFieldGenerator::FilterSmallRegions(TArray<FNNRegion>& Regions, int32 MinSpansForRegions) const
+{
+	// Seems faster than saving the index in the spans and then remapping them
+	TMap<int32, int32> RegionIndexByRegionID;
+	for (int32 i = 0; i < Regions.Num(); ++i)
+	{
+		RegionIndexByRegionID.Add(Regions[i].ID, i);
+	}
+
+	for (int32 i = Regions.Num() -1; i >= 0; --i)
+	{
+		FNNRegion& CurrentRegion = Regions[i];
+		// We will need to merge it with another region or eliminate it
+		// TODO (ignacio) if we are going to access the region neighbours in another place we might want to cache them in the region
+		if (CurrentRegion.Spans.Num() < MinSpansForRegions)
+		{
+			int32 SmallestRegionIndex = INDEX_NONE;
+			int32 SmallestRegionSpansQuantity = TNumericLimits<int32>::Max();
+			for (FNNOpenSpan* Span : CurrentRegion.Spans)
+			{
+				for (FNNOpenSpan* Neighbour : Span->Neighbours)
+				{
+					if (Neighbour && Neighbour->RegionID != CurrentRegion.ID)
+					{
+						const int32 RegionIndex = *RegionIndexByRegionID.Find(Neighbour->RegionID);
+						FNNRegion& NeighbourRegion = Regions[RegionIndex];
+						if (NeighbourRegion.Spans.Num() < SmallestRegionSpansQuantity)
+						{
+							SmallestRegionSpansQuantity = NeighbourRegion.Spans.Num();
+							SmallestRegionIndex = RegionIndex;
+						}
+					}
+				}
+			}
+
+			int32 RegionIDToRemap = INDEX_NONE;
+			for (FNNOpenSpan* Span : CurrentRegion.Spans)
+			{
+				if (SmallestRegionIndex == INDEX_NONE)
+				{
+					Span->RegionID = INDEX_NONE;
+				}
+				else
+				{
+					FNNRegion& NewRegion = Regions[SmallestRegionIndex];
+					Span->RegionID = NewRegion.ID;
+					NewRegion.Spans.Add(Span);
+				}
+			}
+			Regions.RemoveAt(i);
+		}
+	}
+}
+
+void FOpenHeightFieldGenerator::FloodRegion(FNNOpenSpan* CurrentSpan, FNNRegion& Region, int32 CurrentWaterLevel) const
+{
+	Region.Spans.Add(CurrentSpan);
+	CurrentSpan->RegionID = Region.ID;
+	for (FNNOpenSpan* Neighbour : CurrentSpan->Neighbours)
+	{
+		if (Neighbour && Neighbour->RegionID == INDEX_NONE && Neighbour->EdgeDistance == CurrentWaterLevel)
+		{
+			FloodRegion(Neighbour, Region, CurrentWaterLevel);
+		}
 	}
 }
 

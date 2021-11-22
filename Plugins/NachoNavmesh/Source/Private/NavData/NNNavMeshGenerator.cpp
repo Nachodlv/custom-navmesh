@@ -130,13 +130,14 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		}
 
 		// Converts the OpenHeightField Spans into FBoxes
-		if (Result.Value->OpenHeightField->Spans.Num() > 0)
+		const FNNOpenHeightField* OpenHeightField = Result.Value->OpenHeightField.Get();
+		if (OpenHeightField->Spans.Num() > 0)
 		{
-			TArray<TUniquePtr<FNNOpenSpan>>& OpenSpans = Result.Value->OpenHeightField->Spans;
+			const TArray<TUniquePtr<FNNOpenSpan>>& OpenSpans = OpenHeightField->Spans;
 
 			int32 MaxDistance = INDEX_NONE;
 			int32 MinDistance = 1; // There is always a span with distance 0
-			for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenSpans)
+			for (const TUniquePtr<FNNOpenSpan>& OpenSpan : OpenSpans)
 			{
 				if (OpenSpan)
 				{
@@ -176,6 +177,24 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 					OpenSpan = OpenSpan->NextOpenSpan.Get();
 				}
 			}
+		}
+
+		const TArray<FNNRegion>& Regions = OpenHeightField->Regions;
+		DebuggingInfo.Regions.Reserve(Regions.Num());
+		for (const FNNRegion& Region : Regions)
+		{
+			TArray<FBox> RegionSpans;
+			RegionSpans.Reserve(Region.Spans.Num());
+			for (const FNNOpenSpan* OpenSpan : Region.Spans)
+			{
+				const float X = OpenSpan->X * OpenHeightField->CellSize;
+				const float Y = OpenSpan->Y * OpenHeightField->CellSize;
+				const float Z = OpenSpan->MinHeight * OpenHeightField->CellHeight;
+				FVector MinPoint = BoundMinPoint + FVector(X, Y, Z);
+				FVector MaxPoint = MinPoint + FVector(OpenHeightField->CellSize, OpenHeightField->CellSize, 0.0f);
+				RegionSpans.Emplace(FBox(MinPoint, MaxPoint));
+			}
+			DebuggingInfo.Regions.Emplace(FNNNavMeshDebuggingInfo::RegionDebugInfo(RegionSpans));
 		}
 	}
 }

@@ -134,6 +134,31 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 			}
 		}
 
+		if (NavMesh->bDrawRegions)
+		{
+			for (const FNNNavMeshDebuggingInfo::RegionDebugInfo& Region : DebuggingInfo.Regions)
+			{
+				int32 R = FMath::RandRange(0, 255);
+				int32 G = FMath::RandRange(0, 255);
+				int32 B = FMath::RandRange(0, 255);
+				FColor RandomColor = FColor(R, G, B, 255);
+				for (const FBox& Span : Region.Spans)
+				{
+					FVector FirstVertex = Span.Min;
+					FVector SecondVertex = FirstVertex;
+					SecondVertex.Y = Span.Max.Y;
+					FVector ThirdVertex = Span.Max;
+					FVector FourthVertex = ThirdVertex;
+					FourthVertex.Y = Span.Min.Y;
+					FDebugMeshData MeshData;
+					MeshData.Vertices.Append({FirstVertex, SecondVertex, ThirdVertex, FourthVertex});
+					MeshData.Indices.Append({0, 1, 2, 2, 3, 0});
+					MeshData.ClusterColor = RandomColor;
+					MeshBuilders.Add(MeshData);
+				}
+			}
+		}
+
 		// Gather the BoxSpheresTemporary
 		for (const FBoxSphereBounds& BoxSphere : DebuggingInfo.TemporaryBoxSpheres)
 		{
@@ -160,6 +185,7 @@ SIZE_T FNNNavMeshSceneProxy::GetTypeHash() const
 
 FNNNavMeshSceneProxy::FNNNavMeshSceneProxy(const UPrimitiveComponent* InComponent, FNNNavMeshSceneProxyData* InProxyData, bool ForceToRender)
 	: FDebugRenderSceneProxy(InComponent)
+	  , VertexFactory(GetScene().GetFeatureLevel(), "FNNNavMeshSceneProxy")
 	  , bRequestedData(false)
 	  , bForceRendering(ForceToRender)
 {
@@ -171,6 +197,58 @@ FNNNavMeshSceneProxy::FNNNavMeshSceneProxy(const UPrimitiveComponent* InComponen
 		Boxes.Append(InProxyData->AuxBoxes);
 	}
 
+	const int32 NumberOfMeshes = ProxyData.MeshBuilders.Num();
+	if (!NumberOfMeshes)
+	{
+		return;
+	}
+
+	MeshColors.Reserve(NumberOfMeshes);
+	MeshBatchElements.Reserve(NumberOfMeshes);
+	const FMaterialRenderProxy* ParentMaterial = GEngine->DebugMeshMaterial->GetRenderProxy();
+
+	TArray<FDynamicMeshVertex> Vertices;
+	for (int32 Index = 0; Index < NumberOfMeshes; ++Index)
+	{
+		const auto& CurrentMeshBuilder = ProxyData.MeshBuilders[Index];
+
+		FMeshBatchElement Element;
+		Element.FirstIndex = IndexBuffer.Indices.Num();
+		Element.NumPrimitives = FMath::FloorToInt(CurrentMeshBuilder.Indices.Num() / 3);
+		Element.MinVertexIndex = Vertices.Num();
+		Element.MaxVertexIndex = Element.MinVertexIndex + CurrentMeshBuilder.Vertices.Num() - 1;
+		Element.IndexBuffer = &IndexBuffer;
+		MeshBatchElements.Add(Element);
+
+		MeshColors.Add(FColoredMaterialRenderProxy(ParentMaterial, CurrentMeshBuilder.ClusterColor));
+
+		const int32 VertexIndexOffset = Vertices.Num();
+		Vertices.Append(CurrentMeshBuilder.Vertices);
+		if (VertexIndexOffset == 0)
+		{
+			IndexBuffer.Indices.Append(CurrentMeshBuilder.Indices);
+		}
+		else
+		{
+			IndexBuffer.Indices.Reserve(IndexBuffer.Indices.Num() + CurrentMeshBuilder.Indices.Num());
+			for (const auto VertIndex : CurrentMeshBuilder.Indices)
+			{
+				IndexBuffer.Indices.Add(VertIndex + VertexIndexOffset);
+			}
+		}
+	}
+
+	MeshColors.Add(FColoredMaterialRenderProxy(ParentMaterial, FColor::Green));
+
+	if (Vertices.Num())
+	{
+		VertexBuffers.InitFromDynamicVertex(&VertexFactory, Vertices);
+	}
+	if (IndexBuffer.Indices.Num())
+	{
+		BeginInitResource(&IndexBuffer);
+	}
+
 	RenderingComponent = MakeWeakObjectPtr(const_cast<UNNNavMeshRenderingComp*>(Cast<UNNNavMeshRenderingComp>(InComponent)));
 	bSkipDistanceCheck = GIsEditor && (GEngine->GetDebugLocalPlayer() == nullptr);
 	bUseThickLines = GIsEditor;
@@ -178,6 +256,11 @@ FNNNavMeshSceneProxy::FNNNavMeshSceneProxy(const UPrimitiveComponent* InComponen
 
 FNNNavMeshSceneProxy::~FNNNavMeshSceneProxy()
 {
+	VertexBuffers.PositionVertexBuffer.ReleaseResource();
+	VertexBuffers.StaticMeshVertexBuffer.ReleaseResource();
+	VertexBuffers.ColorVertexBuffer.ReleaseResource();
+	IndexBuffer.ReleaseResource();
+	VertexFactory.ReleaseResource();
 }
 
 void FNNNavMeshSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*>& SceneViews,
@@ -196,6 +279,35 @@ void FNNNavMeshSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*
 				continue;
 			}
 			FPrimitiveDrawInterface* PDI = Collector.GetPDI(ViewIndex);
+
+			// Draw Mesh
+			if (MeshBatchElements.Num())
+			{
+				for (int32 Index = 0; Index < MeshBatchElements.Num(); ++Index)
+				{
+					if (MeshBatchElements[Index].NumPrimitives == 0)
+					{
+						continue;
+					}
+
+					FMeshBatch& Mesh = Collector.AllocateMesh();
+					FMeshBatchElement& BatchElement = Mesh.Elements[0];
+					BatchElement = MeshBatchElements[Index];
+
+					FDynamicPrimitiveUniformBuffer& DynamicPrimitiveUniformBuffer = Collector.AllocateOneFrameResource<FDynamicPrimitiveUniformBuffer>();
+					DynamicPrimitiveUniformBuffer.Set(FMatrix::Identity, FMatrix::Identity, GetBounds(), GetLocalBounds(), false, false, DrawsVelocity(), false);
+					BatchElement.PrimitiveUniformBufferResource = &DynamicPrimitiveUniformBuffer.UniformBuffer;
+
+					Mesh.bWireframe = false;
+					Mesh.VertexFactory = &VertexFactory;
+					Mesh.MaterialRenderProxy = &MeshColors[Index];
+					Mesh.ReverseCulling = IsLocalToWorldDeterminantNegative();
+					Mesh.Type = PT_TriangleList;
+					Mesh.DepthPriorityGroup = SDPG_World;
+					Mesh.bCanApplyViewModeOverrides = false;
+					Collector.AddMesh(ViewIndex, Mesh);
+				}
+			}
 
 			// Draw AuxPoints
 			for (int32 Index = 0; Index < ProxyData.AuxPoints.Num(); ++Index)

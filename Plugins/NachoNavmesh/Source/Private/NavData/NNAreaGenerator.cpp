@@ -79,7 +79,7 @@ void FNNAreaGenerator::DoWork()
 
 	const FOpenHeightFieldGenerator OpenHeightFieldGenerator (*AreaGeneratorData);
 	AreaGeneratorData->OpenHeightField = MakeUnique<FNNOpenHeightField>();
-	OpenHeightFieldGenerator.GenerateOpenHeightField(*AreaGeneratorData->OpenHeightField, *AreaGeneratorData->HeightField, NavMesh->MaxLedgeHeight, NavMesh->AgentHeight);
+	OpenHeightFieldGenerator.GenerateOpenHeightField(*AreaGeneratorData->OpenHeightField, *AreaGeneratorData->HeightField, NavMesh->MaxLedgeHeight, NavMesh->AgentHeight, NavMesh->MinRegionSize);
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)

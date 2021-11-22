@@ -62,6 +62,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization")
 	bool bDrawOpenHeightField = false;
 
+	/** Whether it should draw the regions created with the open spans */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|Region")
+	bool bDrawRegions = false;
+
 	/** Whether it should only draw the floor of the OpenHeightField's spans */
 	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization", meta = (EditCondition = "bDrawOpenHeightField"))
 	bool bDrawOpenHeightFieldFloor = false;
@@ -85,4 +89,7 @@ public:
 	/** The maximum ledge an agent can walk */
 	UPROPERTY(EditAnywhere, Category = "NN|Config")
 	float MaxLedgeHeight = 50.0f;
+
+	UPROPERTY(EditAnywhere, Category = "NN|Config")
+	float MinRegionSize = 50.0f;
 };

@@ -9,6 +9,7 @@
 #include "NNNavMeshRenderingComp.generated.h"
 
 struct FNNRawGeometryElement;
+struct FNNRegion;
 
 class ANNNavMesh;
 class UNNNavMeshRenderingComp;
@@ -90,6 +91,12 @@ protected:
 	virtual uint32 GetMemoryFootprint() const override { return sizeof(*this) + FNNNavMeshSceneProxy::GetAllocatedSize(); }
 	uint32 GetAllocatedSize() const;
 
+	TArray<FColoredMaterialRenderProxy> MeshColors;
+	TArray<FMeshBatchElement> MeshBatchElements;
+	FDynamicMeshIndexBuffer32 IndexBuffer;
+	FStaticMeshVertexBuffers VertexBuffers;
+	FLocalVertexFactory VertexFactory;
+
 private:
 	/** Contains all the information to draw */
 	FNNNavMeshSceneProxyData ProxyData;
@@ -110,6 +117,11 @@ struct FNNNavMeshDebuggingInfo
 		FBox Box;
 		FColor Color;
 	};
+	struct RegionDebugInfo
+	{
+		RegionDebugInfo(const TArray<FBox>& InSpans) : Spans(InSpans) {}
+		TArray<FBox> Spans;
+	};
 
 	/** The geometry vertices */
 	TArray<FNNRawGeometryElement> RawGeometryToDraw;
@@ -123,6 +135,7 @@ struct FNNNavMeshDebuggingInfo
 	TArray<FNNNavMeshSceneProxyData::FDebugText> TemporaryTexts;
 	/** Lines for debugging. No specific usage */
 	TArray<FDebugRenderSceneProxy::FDebugLine> TemporaryLines;
+	TArray<RegionDebugInfo> Regions;
 };
 
 class FNNNavMeshDebugDrawHelper : public FDebugDrawDelegateHelper
