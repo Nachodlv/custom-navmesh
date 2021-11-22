@@ -13,14 +13,14 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - Override the prefered Navdata from your movement comonent's character AI yourself
 
 ## TO DO
-- [ ] Voxelization
+- [X] Voxelization
   - [X] Gather Geometry
   - [X] Footprint the geometry
   - [X] Implement heightfields
   - [X] Identify walkable spans
-  - [ ] Implement an open heightfield
+  - [X] Implement an open heightfield
     - [X] Create the open spans with the solid spans
-    - [ ] Collect the open spans walkable neighbours
+    - [X] Collect the open spans walkable neighbours
 - [ ] Region Generation
 - [ ] Contour Generation
 - [ ] Convex Polygon Generation

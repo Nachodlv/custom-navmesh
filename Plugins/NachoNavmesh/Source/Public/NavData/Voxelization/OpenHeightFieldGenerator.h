@@ -22,6 +22,8 @@ struct FNNOpenSpan
 	int32 Y = INDEX_NONE;
 	/** The OpenSpan in top of this one */
 	TUniquePtr<FNNOpenSpan> NextOpenSpan = nullptr;
+	/** The distance of this span to an edge */
+	int32 EdgeDistance = INDEX_NONE;
 };
 
 struct FNNOpenHeightField
@@ -35,7 +37,6 @@ struct FNNOpenHeightField
 	float CellSize = 0.0f;
 	float CellHeight = 0.0f;
 	TArray<TUniquePtr<FNNOpenSpan>> Spans;
-	int32 EdgeDistance = INDEX_NONE;
 };
 
 class FOpenHeightFieldGenerator
@@ -44,8 +45,17 @@ public:
 	FOpenHeightFieldGenerator(FNNAreaGeneratorData& InAreaGeneratorData) : AreaGeneratorData(InAreaGeneratorData) {}
 
 	/** Generates a HeightField with the open spaces */
-	void GenerateOpenHeightField(FNNOpenHeightField& OutOpenHeightField, const FNNHeightField& SolidHeightField) const;
+	void GenerateOpenHeightField(FNNOpenHeightField& OutOpenHeightField, const FNNHeightField& SolidHeightField, float MaxLedgeHeight, float AgentHeight) const;
 
+protected:
+	/** Get the edge from the OpenSpan to its nearest edge */
+	int32 GetOpenSpanEdgeDistance(const FNNOpenSpan* OpenSpan) const;
+
+	/** Returns the center world position from the OpenSpan */
+	static FVector GetOpenSpanWorldPosition(const FNNOpenSpan* OpenSpan, const FNNOpenHeightField& OpenHeightField);
+
+	/** Sets the OpenSpan neighbours */
+	void SetOpenSpanNeighbours(FNNOpenHeightField& OutOpenHeightField, const TArray<FVector2D>& PossibleNeighbours, FNNOpenSpan* OpenSpan, float MaxLedgeHeight, float AgentHeight) const;
 private:
 	FNNAreaGeneratorData& AreaGeneratorData;
 };

@@ -1,5 +1,8 @@
 ﻿#include "NavData/NNNavMeshGenerator.h"
 
+// UE Includes
+#include "Kismet/KismetMathLibrary.h"
+
 // NN Includes
 #include "NavData/NNNavMeshRenderingComp.h"
 #include "NavData/Voxelization/HeightFieldGenerator.h"
@@ -127,27 +130,51 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		}
 
 		// Converts the OpenHeightField Spans into FBoxes
-		TArray<TUniquePtr<FNNOpenSpan>>& OpenSpans = Result.Value->OpenHeightField->Spans;
-		float MaxHeight = Result.Value->OpenHeightField->Bounds.Max.Z;
-		for (int32 i = 0; i < OpenSpans.Num(); ++i)
+		if (Result.Value->OpenHeightField->Spans.Num() > 0)
 		{
-			FNNOpenSpan* OpenSpan = OpenSpans[i].Get();
-			while (OpenSpan)
+			TArray<TUniquePtr<FNNOpenSpan>>& OpenSpans = Result.Value->OpenHeightField->Spans;
+
+			int32 MaxDistance = INDEX_NONE;
+			int32 MinDistance = 1; // There is always a span with distance 0
+			for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenSpans)
 			{
-				const int32 X = OpenSpan->X * CellSize;
-				const int32 Y = OpenSpan->Y * CellSize;
-				const float MinZ = OpenSpan->MinHeight * CellHeight;
-				const float MaxZ = OpenSpan->MaxHeight != INDEX_NONE ? OpenSpan->MaxHeight * CellHeight : MaxHeight;
-				FVector MinPoint = BoundMinPoint;
-				MinPoint += FVector(X, Y, MinZ);
-				FVector MaxPoint = BoundMinPoint + FVector(X + CellSize, Y + CellSize, MaxZ);
+				if (OpenSpan)
+				{
+					if (MaxDistance < OpenSpan->EdgeDistance)
+					{
+						MaxDistance = OpenSpan->EdgeDistance;
+					}
+					else if (MinDistance > OpenSpan->EdgeDistance)
+					{
+						MinDistance = OpenSpan->EdgeDistance;
+					}
+				}
+			}
 
-				FNNNavMeshDebuggingInfo::HeightFieldDebugBox DebugBox;
-				DebugBox.Box = FBox(MinPoint, MaxPoint);
-				DebugBox.Color = FColor::Green;
-				DebuggingInfo.OpenHeightField.Add(MoveTemp(DebugBox));
+			FLinearColor MaxColor = FLinearColor::Red;
+			FLinearColor MinColor = FLinearColor::Green;
+			float MaxHeight = Result.Value->OpenHeightField->Bounds.Max.Z;
+			for (int32 i = 0; i < OpenSpans.Num(); ++i)
+			{
+				FNNOpenSpan* OpenSpan = OpenSpans[i].Get();
+				while (OpenSpan)
+				{
+					const int32 X = OpenSpan->X * CellSize;
+					const int32 Y = OpenSpan->Y * CellSize;
+					const float MinZ = OpenSpan->MinHeight * CellHeight;
+					const float MaxZ = OpenSpan->MaxHeight  * CellHeight < MaxHeight ? OpenSpan->MaxHeight * CellHeight : MaxHeight;
+					FVector MinPoint = BoundMinPoint;
+					MinPoint += FVector(X, Y, MinZ);
+					FVector MaxPoint = BoundMinPoint + FVector(X + CellSize, Y + CellSize, MaxZ);
 
-				OpenSpan = OpenSpan->NextOpenSpan.Get();
+					FNNNavMeshDebuggingInfo::HeightFieldDebugBox DebugBox;
+					DebugBox.Box = FBox(MinPoint, MaxPoint);
+					float DistanceNormalized = UKismetMathLibrary::NormalizeToRange(OpenSpan->EdgeDistance, MinDistance, MaxDistance);
+					DebugBox.Color = FLinearColor::LerpUsingHSV(MinColor, MaxColor, DistanceNormalized).ToFColor(false);
+					DebuggingInfo.OpenHeightField.Add(MoveTemp(DebugBox));
+
+					OpenSpan = OpenSpan->NextOpenSpan.Get();
+				}
 			}
 		}
 	}

@@ -51,19 +51,19 @@ public:
 	bool bDrawGeometry = false;
 
 	/** Whether it should draw points in the element vertex and lines between them */
-	UPROPERTY(EditAnywhere, Category = "NN|Debug")
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization")
 	bool bDrawPolygons = false;
 
 	/** Whether it should draw the spans from the HeightField */
-	UPROPERTY(EditAnywhere, Category = "NN|Debug")
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization")
 	bool bDrawHeightField = false;
 
 	/** Whether it should draw the spans from the OpenHeightField */
-	UPROPERTY(EditAnywhere, Category = "NN|Debug")
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization")
 	bool bDrawOpenHeightField = false;
 
 	/** Whether it should only draw the floor of the OpenHeightField's spans */
-	UPROPERTY(EditAnywhere, Category = "NN|Debug", meta = (EditCondition = "bDrawOpenHeightField"))
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization", meta = (EditCondition = "bDrawOpenHeightField"))
 	bool bDrawOpenHeightFieldFloor = false;
 
 	/** Size of the tallest agent that will path with this navmesh. */
