@@ -16,8 +16,8 @@ struct Span
 	}
 	Span(int32 InMaxSpanHeight, int32 InMinSpanHeight, bool bInWalkable)
 		: MaxSpanHeight(InMaxSpanHeight), MinSpanHeight(InMinSpanHeight), bWalkable(bInWalkable) {}
-
-	Span(const Span& InSpan) = delete;
+	Span (Span&& InSpan) noexcept
+		: MaxSpanHeight(InSpan.MaxSpanHeight), MinSpanHeight(InSpan.MinSpanHeight), bWalkable(InSpan.bWalkable), NextSpan(MoveTemp(InSpan.NextSpan)) {}
 
 	int32 MaxSpanHeight = INDEX_NONE;
 	int32 MinSpanHeight = INDEX_NONE;

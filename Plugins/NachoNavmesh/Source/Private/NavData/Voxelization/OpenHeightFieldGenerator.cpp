@@ -253,45 +253,54 @@ void FOpenHeightFieldGenerator::FilterSmallRegions(TArray<FNNRegion>& Regions, i
 	for (int32 i = Regions.Num() -1; i >= 0; --i)
 	{
 		FNNRegion& CurrentRegion = Regions[i];
-		// We will need to merge it with another region or eliminate it
 		// TODO (ignacio) if we are going to access the region neighbours in another place we might want to cache them in the region
-		if (CurrentRegion.Spans.Num() < MinSpansForRegions)
+		if (CurrentRegion.Spans.Num() > MinSpansForRegions)
 		{
-			int32 SmallestRegionIndex = INDEX_NONE;
-			int32 SmallestRegionSpansQuantity = TNumericLimits<int32>::Max();
-			for (FNNOpenSpan* Span : CurrentRegion.Spans)
+			continue;
+		}
+		// We will need to merge it with another region or eliminate it
+		int32 SmallestRegionIndex = INDEX_NONE;
+		int32 SmallestRegionSpansQuantity = TNumericLimits<int32>::Max();
+		for (FNNOpenSpan* Span : CurrentRegion.Spans)
+		{
+			for (FNNOpenSpan* Neighbour : Span->Neighbours)
 			{
-				for (FNNOpenSpan* Neighbour : Span->Neighbours)
+				if (Neighbour && Neighbour->RegionID != CurrentRegion.ID)
 				{
-					if (Neighbour && Neighbour->RegionID != CurrentRegion.ID)
+					const int32 RegionIndex = *RegionIndexByRegionID.Find(Neighbour->RegionID);
+					FNNRegion& NeighbourRegion = Regions[RegionIndex];
+					if (NeighbourRegion.Spans.Num() < SmallestRegionSpansQuantity)
 					{
-						const int32 RegionIndex = *RegionIndexByRegionID.Find(Neighbour->RegionID);
-						FNNRegion& NeighbourRegion = Regions[RegionIndex];
-						if (NeighbourRegion.Spans.Num() < SmallestRegionSpansQuantity)
-						{
-							SmallestRegionSpansQuantity = NeighbourRegion.Spans.Num();
-							SmallestRegionIndex = RegionIndex;
-						}
+						SmallestRegionSpansQuantity = NeighbourRegion.Spans.Num();
+						SmallestRegionIndex = RegionIndex;
 					}
 				}
 			}
-
-			int32 RegionIDToRemap = INDEX_NONE;
-			for (FNNOpenSpan* Span : CurrentRegion.Spans)
-			{
-				if (SmallestRegionIndex == INDEX_NONE)
-				{
-					Span->RegionID = INDEX_NONE;
-				}
-				else
-				{
-					FNNRegion& NewRegion = Regions[SmallestRegionIndex];
-					Span->RegionID = NewRegion.ID;
-					NewRegion.Spans.Add(Span);
-				}
-			}
-			Regions.RemoveAt(i);
 		}
+
+		for (FNNOpenSpan* Span : CurrentRegion.Spans)
+		{
+			if (SmallestRegionIndex == INDEX_NONE)
+			{
+				Span->RegionID = INDEX_NONE;
+			}
+			else
+			{
+				FNNRegion& NewRegion = Regions[SmallestRegionIndex];
+				Span->RegionID = NewRegion.ID;
+				NewRegion.Spans.Add(Span);
+			}
+		}
+		RegionIndexByRegionID.Remove(Regions[i].ID);
+		Regions.RemoveAt(i);
+
+		// Remap RegionIndexByRegionID
+		for (int32 RemapIndex = i; RemapIndex < Regions.Num(); ++RemapIndex)
+		{
+			RegionIndexByRegionID[Regions[RemapIndex].ID] = RemapIndex;
+		}
+
+		// TODO (ignacio) fix me
 	}
 }
 

@@ -111,7 +111,7 @@ void FHeightFieldGenerator::InitializeHeightField(FNNHeightField& OutHeightField
 							}
 							else
 							{
-								OutHeightField.Spans[i + j * XHeightFieldNum] = MakeUnique<Span>(NewSpan.MaxSpanHeight, NewSpan.MinSpanHeight, NewSpan.bWalkable);
+								OutHeightField.Spans[i + j * XHeightFieldNum] = MakeUnique<Span>(MoveTemp(NewSpan));
 							}
 							// AreaGeneratorData.AddDebugText(Cell.GetCenter(), FString::FromInt(i + j * XHeightFieldNum));
 							// AreaGeneratorData.AddDebugText(Cell.GetCenter(), FString::Printf(TEXT("(%d, %d)"), i , j));
