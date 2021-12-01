@@ -5,6 +5,7 @@
 
 // NN Includes
 #include "NavData/NNNavMeshGenerator.h"
+#include "NavData/Regions/NNRegionGenerator.h"
 #include "NavData/Voxelization/HeightFieldGenerator.h"
 #include "NavData/Voxelization/OpenHeightFieldGenerator.h"
 
@@ -70,6 +71,7 @@ void FNNAreaGenerator::DoWork()
 	const FVector& MinimumPoint = AreaBounds.AreaBox.Min;
 	const FVector& MaximumPoint = AreaBounds.AreaBox.Max;
 
+	// Create Solid HeightField
 	const FHeightFieldGenerator HeightFieldGenerator (*AreaGeneratorData);
 	AreaGeneratorData->HeightField = MakeUnique<FNNHeightField>();
 	HeightFieldGenerator.InitializeHeightField(*AreaGeneratorData->HeightField ,
@@ -77,9 +79,14 @@ void FNNAreaGenerator::DoWork()
 		HeightFieldHeight, NavMesh->WalkableSlopeDegrees, NavMesh->AgentHeight, NavMesh->MaxLedgeHeight);
 
 
+	// Create Open HeightField
 	const FOpenHeightFieldGenerator OpenHeightFieldGenerator (*AreaGeneratorData);
 	AreaGeneratorData->OpenHeightField = MakeUnique<FNNOpenHeightField>();
-	OpenHeightFieldGenerator.GenerateOpenHeightField(*AreaGeneratorData->OpenHeightField, *AreaGeneratorData->HeightField, NavMesh->MaxLedgeHeight, NavMesh->AgentHeight, NavMesh->MinRegionSize);
+	OpenHeightFieldGenerator.GenerateOpenHeightField(*AreaGeneratorData->OpenHeightField, *AreaGeneratorData->HeightField, NavMesh->MaxLedgeHeight, NavMesh->AgentHeight);
+
+	// Generate Regions for the Open HeightField
+	const FNNRegionGenerator RegionGenerator;
+	RegionGenerator.CreateRegions(*AreaGeneratorData->OpenHeightField, NavMesh->MinRegionSize);
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)

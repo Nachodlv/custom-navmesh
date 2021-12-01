@@ -4,6 +4,14 @@ struct FNNAreaGeneratorData;
 struct FNNHeightField;
 struct FNNRegion;
 
+/** Flags used in the FNNOpenSpan */
+enum ENNOpenSpanFlags
+{
+	None = 0,
+	NullRegionChecked = 1 << 0
+};
+ENUM_CLASS_FLAGS(ENNOpenSpanFlags);
+
 /** A cell representing a open space */
 struct FNNOpenSpan
 {
@@ -27,6 +35,17 @@ struct FNNOpenSpan
 	int32 EdgeDistance = INDEX_NONE;
 	/** The region identifier this span belongs to */
 	int32 RegionID = INDEX_NONE;
+	int32 Flags = ENNOpenSpanFlags::None;
+
+	friend bool operator==(const FNNOpenSpan& Lhs, const FNNOpenSpan& Rhs)
+	{
+		return Lhs.X == Rhs.X && Lhs.Y == Rhs.Y;
+	}
+
+	/** Returns all 8 neighbours of the this span
+ 	* 0 - 3: Standard axis-neighbour order
+ 	* 4 - 7: Standard diagonal neighbours. */
+	TArray<FNNOpenSpan*> GetDetailedNeighbours() const;
 };
 
 struct FNNOpenHeightField
@@ -45,6 +64,8 @@ struct FNNOpenHeightField
 	int32 SpanMaxEdgeDistance = INDEX_NONE;
 	/** The regions that this OpenHeightFieldContains */
 	TArray<FNNRegion> Regions;
+
+	int32 GetRegionIndexByID(int32 ID) const;
 };
 
 struct FNNRegion
@@ -52,6 +73,7 @@ struct FNNRegion
 	FNNRegion(int32 InID) : ID(InID) {}
 	int32 ID = INDEX_NONE;
 	TArray<FNNOpenSpan*> Spans;
+	static FNNRegion GenerateNewRegion();
 };
 
 class FOpenHeightFieldGenerator
@@ -60,7 +82,7 @@ public:
 	FOpenHeightFieldGenerator(FNNAreaGeneratorData& InAreaGeneratorData) : AreaGeneratorData(InAreaGeneratorData) {}
 
 	/** Generates a HeightField with the open spaces */
-	void GenerateOpenHeightField(FNNOpenHeightField& OutOpenHeightField, const FNNHeightField& SolidHeightField, float MaxLedgeHeight, float AgentHeight, float MinRegionSize) const;
+	void GenerateOpenHeightField(FNNOpenHeightField& OutOpenHeightField, const FNNHeightField& SolidHeightField, float MaxLedgeHeight, float AgentHeight) const;
 
 protected:
 	/** Get the edge from the OpenSpan to its nearest edge */
@@ -71,18 +93,6 @@ protected:
 
 	/** Sets the OpenSpan neighbours */
 	void SetOpenSpanNeighbours(FNNOpenHeightField& OutOpenHeightField, const TArray<FVector2D>& PossibleNeighbours, FNNOpenSpan* OpenSpan, float MaxLedgeHeight, float AgentHeight) const;
-
-	/** Initializes the regions of the open spans with a watershed algorithm */
-	void CreateRegions(FNNOpenHeightField& OpenHeightField, int32 MinSpansForRegions) const;
-
-	/** Sets the region to the CurrentSpan neighbours with the same WaterLevel */
-	void FloodRegion(FNNOpenSpan* CurrentSpan, FNNRegion& Region, int32 CurrentWaterLevel) const;
-
-	/** Grows the current regions created equally */
-	void GrowRegions(FNNOpenHeightField& OpenHeightField, int32 CurrentWaterLevel) const;
-
-	/** Deletes or combines regions with less than te MinSpansForRegions */
-	void FilterSmallRegions(TArray<FNNRegion>& Regions, int32 MinSpansForRegions) const;
 
 private:
 	FNNAreaGeneratorData& AreaGeneratorData;
