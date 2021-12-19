@@ -94,6 +94,7 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		DebuggingInfo.TemporaryBoxSpheres.Append(Result.Value->TemporaryBoxSpheres);
 		DebuggingInfo.TemporaryTexts.Append(Result.Value->TemporaryTexts);
 		DebuggingInfo.TemporaryLines.Append(Result.Value->TemporaryLines);
+		DebuggingInfo.TemporaryArrows.Append(Result.Value->TemporaryArrows);
 
 		const TArray<TUniquePtr<Span>>& Spans = Result.Value->HeightField->Spans;
 
@@ -179,6 +180,7 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 			}
 		}
 
+		// Grab the Regions debugging info
 		const TArray<FNNRegion>& Regions = OpenHeightField->Regions;
 		DebuggingInfo.Regions.Reserve(Regions.Num());
 		for (const FNNRegion& Region : Regions)
@@ -195,6 +197,24 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 				RegionSpans.Emplace(FBox(MinPoint, MaxPoint));
 			}
 			DebuggingInfo.Regions.Emplace(FNNNavMeshDebuggingInfo::RegionDebugInfo(RegionSpans));
+		}
+
+		// Grab the contour debugging info
+		const TArray<FNNContour>& Contours = OpenHeightField->Contours;
+		DebuggingInfo.Contours.Reserve(Contours.Num());
+		for (const FNNContour& Contour : Contours)
+		{
+			TArray<FVector> DebugVertexes;
+			for (const FVector& Vertex : Contour.Vertexes)
+			{
+				const float X = Vertex.X * OpenHeightField->CellSize;
+				const float Y = Vertex.Y * OpenHeightField->CellSize;
+				const float Z = Vertex.Z * OpenHeightField->CellHeight;
+				FVector WorldVertex = BoundMinPoint + FVector(X, Y, Z);
+				DebugVertexes.Add(MoveTemp(WorldVertex));
+			}
+			FNNNavMeshDebuggingInfo::ContourDebugInfo DebugInfo(MoveTemp(DebugVertexes));
+			DebuggingInfo.Contours.Add(MoveTemp(DebugInfo));
 		}
 	}
 }

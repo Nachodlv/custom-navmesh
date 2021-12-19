@@ -5,6 +5,7 @@
 
 // NN Includes
 #include "NavData/NNNavMeshGenerator.h"
+#include "NavData/Contour/NNContourGeneration.h"
 #include "NavData/Regions/NNRegionGenerator.h"
 #include "NavData/Voxelization/HeightFieldGenerator.h"
 #include "NavData/Voxelization/OpenHeightFieldGenerator.h"
@@ -28,6 +29,7 @@ FNNAreaGeneratorData::~FNNAreaGeneratorData()
 	TemporaryBoxSpheres.Reset();
 	RawGeometry.Reset();
 	TemporaryLines.Reset();
+	TemporaryArrows.Reset();
 	TemporaryTexts.Reset();
 }
 
@@ -45,6 +47,11 @@ void FNNAreaGeneratorData::AddDebugText(const FVector& Location, const FString& 
 void FNNAreaGeneratorData::AddDebugLine(const FVector& Start, const FVector& End)
 {
 	TemporaryLines.Emplace(Start, End, FColor::Blue, 2.0f);
+}
+
+void FNNAreaGeneratorData::AddDebugArrow(const FVector& Start, const FVector& End, const FColor& Color)
+{
+	TemporaryArrows.Emplace(Start, End, Color);
 }
 
 FNNAreaGenerator::FNNAreaGenerator(FNNNavMeshGenerator* InParentGenerator, const FNavigationBounds& Bounds)
@@ -87,6 +94,10 @@ void FNNAreaGenerator::DoWork()
 	// Generate Regions for the Open HeightField
 	const FNNRegionGenerator RegionGenerator;
 	RegionGenerator.CreateRegions(*AreaGeneratorData->OpenHeightField, NavMesh->MinRegionSize);
+
+	// Generate Contour
+	FNNContourGeneration ContourGeneration (*AreaGeneratorData);
+	ContourGeneration.CalculateContour(*AreaGeneratorData->OpenHeightField);
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)

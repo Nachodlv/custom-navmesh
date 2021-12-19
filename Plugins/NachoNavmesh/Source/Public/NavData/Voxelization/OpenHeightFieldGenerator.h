@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 struct FNNAreaGeneratorData;
+struct FNNContour;
 struct FNNHeightField;
 struct FNNRegion;
 
@@ -8,7 +9,7 @@ struct FNNRegion;
 enum ENNOpenSpanFlags
 {
 	None = 0,
-	NullRegionChecked = 1 << 0
+	NullRegionChecked = 1 << 0,
 };
 ENUM_CLASS_FLAGS(ENNOpenSpanFlags);
 
@@ -25,9 +26,9 @@ struct FNNOpenSpan
 	int32 MinHeight = INDEX_NONE;
 	int32 MaxHeight = INDEX_NONE;
 	TArray<FNNOpenSpan*> Neighbours; // 4 neighbours (-1, 0), (0, 1), (1, 0), (0, -1)
-	/** X coordinate in the Spans array of the FNNOpenHeightField */
+	/** X coordinate in the Spans array of the FNNOpenHeightField. Depth */
 	int32 X = INDEX_NONE;
-	/** Y coordinate in the Spans array of the FNNOpenHeightField */
+	/** Y coordinate in the Spans array of the FNNOpenHeightField. Width */
 	int32 Y = INDEX_NONE;
 	/** The OpenSpan in top of this one */
 	TUniquePtr<FNNOpenSpan> NextOpenSpan = nullptr;
@@ -36,16 +37,22 @@ struct FNNOpenSpan
 	/** The region identifier this span belongs to */
 	int32 RegionID = INDEX_NONE;
 	int32 Flags = ENNOpenSpanFlags::None;
+	/** Each bit represents whether the OpenSpan is connected to another region
+	* 0 represents the neighbour is in the same region, 1 is that is not in the same region
+	* If it's surrounded by other regions all the bits will be 0 */
+	uint8 NeighbourFlags = 0;
 
 	friend bool operator==(const FNNOpenSpan& Lhs, const FNNOpenSpan& Rhs)
 	{
-		return Lhs.X == Rhs.X && Lhs.Y == Rhs.Y;
+		return Lhs.X == Rhs.X && Lhs.Y == Rhs.Y && Lhs.NextOpenSpan == Rhs.NextOpenSpan;
 	}
 
 	/** Returns all 8 neighbours of the this span
  	* 0 - 3: Standard axis-neighbour order
  	* 4 - 7: Standard diagonal neighbours. */
 	TArray<FNNOpenSpan*> GetDetailedNeighbours() const;
+	/** Returns the center world position from the OpenSpan */
+	FVector GetOpenSpanWorldPosition(const FNNOpenHeightField& OpenHeightField) const;
 };
 
 struct FNNOpenHeightField
@@ -58,7 +65,9 @@ struct FNNOpenHeightField
 	FBox Bounds;
 	float CellSize = 0.0f;
 	float CellHeight = 0.0f;
+	int32 AmountOfSpans = 0;
 	TArray<TUniquePtr<FNNOpenSpan>> Spans;
+	TArray<FNNContour> Contours;
 
 	/** The maximum distance from an edge a Span has from the Spans array */
 	int32 SpanMaxEdgeDistance = INDEX_NONE;
@@ -87,9 +96,6 @@ public:
 protected:
 	/** Get the edge from the OpenSpan to its nearest edge */
 	int32 GetOpenSpanEdgeDistance(const FNNOpenSpan* OpenSpan) const;
-
-	/** Returns the center world position from the OpenSpan */
-	static FVector GetOpenSpanWorldPosition(const FNNOpenSpan* OpenSpan, const FNNOpenHeightField& OpenHeightField);
 
 	/** Sets the OpenSpan neighbours */
 	void SetOpenSpanNeighbours(FNNOpenHeightField& OutOpenHeightField, const TArray<FVector2D>& PossibleNeighbours, FNNOpenSpan* OpenSpan, float MaxLedgeHeight, float AgentHeight) const;

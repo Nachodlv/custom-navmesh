@@ -26,6 +26,8 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - [X] Filter small regions
   - [X] Clear null region borders
 - [ ] Contour Generation
+  - [X] Implement contour generation
+  - [ ] Simplify the contour
 - [ ] Convex Polygon Generation
 - [ ] Detail Mesh Generation
 

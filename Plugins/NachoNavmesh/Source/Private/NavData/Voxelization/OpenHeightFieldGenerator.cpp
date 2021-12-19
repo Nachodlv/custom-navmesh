@@ -23,6 +23,14 @@ TArray<FNNOpenSpan*> FNNOpenSpan::GetDetailedNeighbours() const
 	return DetailedNeighbours;
 }
 
+FVector FNNOpenSpan::GetOpenSpanWorldPosition(const FNNOpenHeightField& OpenHeightField) const
+{
+	const float WorldX = X * OpenHeightField.CellSize + OpenHeightField.CellSize / 2;
+	const float WorldY = Y * OpenHeightField.CellSize + OpenHeightField.CellSize / 2;
+	const float WorldZ = MinHeight * OpenHeightField.CellHeight;
+	return OpenHeightField.Bounds.Min + FVector(WorldX, WorldY, WorldZ);
+}
+
 FNNOpenHeightField::FNNOpenHeightField(int32 InUnitsWidth, int32 InUnitsDepth, int32 InUnitsHeight)
 	: UnitsWidth(InUnitsWidth), UnitsDepth(InUnitsDepth), UnitsHeight(InUnitsHeight)
 {
@@ -78,6 +86,7 @@ void FOpenHeightFieldGenerator::GenerateOpenHeightField(FNNOpenHeightField& OutO
 					OutOpenHeightField.Spans[Index] = MakeUnique<FNNOpenSpan>(MinHeight, MaxHeight, X, Y);
 					LastOpenSpan = OutOpenHeightField.Spans[Index].Get();
 				}
+				++OutOpenHeightField.AmountOfSpans;
 			}
 			Span = Span->NextSpan.Get();
 		}
@@ -108,7 +117,8 @@ void FOpenHeightFieldGenerator::GenerateOpenHeightField(FNNOpenHeightField& OutO
 
 #if DEBUG_OPENHEIGHTFIELD
 			// Debug distances
-			AreaGeneratorData.AddDebugText(GetOpenSpanWorldPosition(OpenSpan, OutOpenHeightField), FString::FromInt(OpenSpan->EdgeDistance));
+			const FVector OpenSpanPosition = OpenSpan->GetOpenSpanWorldPosition(OutOpenHeightField);
+			AreaGeneratorData.AddDebugText(OpenSpanPosition, FString::FromInt(OpenSpan->EdgeDistance));
 #endif // DEBUG_OPENHEIGHTFIELD_DISTANCE
 			OpenSpan = OpenSpan->NextOpenSpan.Get();
 		}
@@ -130,7 +140,9 @@ void FOpenHeightFieldGenerator::SetOpenSpanNeighbours(FNNOpenHeightField& OutOpe
 		{
 			// Head Bonk Test
 			bool bWillHeadBonk = false;
-			const int32 SpaceBetween = FMath::Abs(NeighbourSpan->MaxHeight - OpenSpan->MinHeight);
+			int32 SpaceBetween = FMath::Abs(NeighbourSpan->MaxHeight - OpenSpan->MinHeight);
+			// We need to check both ways
+			SpaceBetween = FMath::Min(SpaceBetween, FMath::Abs(OpenSpan->MaxHeight - NeighbourSpan->MinHeight));
 			if (SpaceBetween * OutOpenHeightField.CellHeight < AgentHeight)
 			{
 				bWillHeadBonk = true;
@@ -162,8 +174,8 @@ void FOpenHeightFieldGenerator::SetOpenSpanNeighbours(FNNOpenHeightField& OutOpe
 		// Debug neighbours
 		if (NearestNeighbourSpan)
 		{
-			FVector CurrentSpanLocation = GetOpenSpanWorldPosition(OpenSpan, OutOpenHeightField);
-			FVector NeighbourLocation = GetOpenSpanWorldPosition(NearestNeighbourSpan, OutOpenHeightField);
+			FVector CurrentSpanLocation = OpenSpan->GetOpenSpanWorldPosition(OutOpenHeightField);
+			FVector NeighbourLocation =NearestNeighbourSpan-> GetOpenSpanWorldPosition(OutOpenHeightField);
 			AreaGeneratorData.AddDebugLine(CurrentSpanLocation, NeighbourLocation);
 		}
 #endif // DEBUG_OPENHEIGHTFIELD_DISTANCE
@@ -214,12 +226,5 @@ int32 FOpenHeightFieldGenerator::GetOpenSpanEdgeDistance(const FNNOpenSpan* Open
 
 }
 
-FVector FOpenHeightFieldGenerator::GetOpenSpanWorldPosition(const FNNOpenSpan* OpenSpan, const FNNOpenHeightField& OpenHeightField)
-{
-	const float X = OpenSpan->X * OpenHeightField.CellSize + OpenHeightField.CellSize / 2;
-	const float Y = OpenSpan->Y * OpenHeightField.CellSize + OpenHeightField.CellSize / 2;
-	const float Z = OpenSpan->MinHeight * OpenHeightField.CellHeight;
-	return OpenHeightField.Bounds.Min + FVector(X, Y, Z);
-}
 
 

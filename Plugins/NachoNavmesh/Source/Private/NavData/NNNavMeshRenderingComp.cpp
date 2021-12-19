@@ -41,6 +41,14 @@ namespace NNNavMeshRenderingCompHelper
 
 		return true;
 	}
+
+	FColor GetRandomColor()
+	{
+		const int32 R = FMath::RandRange(0, 255);
+		const int32 G = FMath::RandRange(0, 255);
+		const int32 B = FMath::RandRange(0, 255);
+		return  FColor(R, G, B, 255);
+	}
 }
 
 void FNNNavMeshSceneProxyData::Reset()
@@ -138,10 +146,7 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 		{
 			for (const FNNNavMeshDebuggingInfo::RegionDebugInfo& Region : DebuggingInfo.Regions)
 			{
-				int32 R = FMath::RandRange(0, 255);
-				int32 G = FMath::RandRange(0, 255);
-				int32 B = FMath::RandRange(0, 255);
-				FColor RandomColor = FColor(R, G, B, 255);
+				FColor RandomColor = NNNavMeshRenderingCompHelper::GetRandomColor();
 				for (const FBox& Span : Region.Spans)
 				{
 					FVector FirstVertex = Span.Min;
@@ -154,8 +159,29 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 					MeshData.Vertices.Append({FirstVertex, SecondVertex, ThirdVertex, FourthVertex});
 					MeshData.Indices.Append({0, 1, 2, 2, 3, 0});
 					MeshData.ClusterColor = RandomColor;
-					MeshBuilders.Add(MeshData);
+					MeshBuilders.Add(MoveTemp(MeshData));
 				}
+			}
+		}
+
+		if (NavMesh->bDrawContours)
+		{
+			for (const auto& Contour : DebuggingInfo.Contours)
+			{
+				FColor RandomColor = NNNavMeshRenderingCompHelper::GetRandomColor();
+				const uint32 VerticesNum = Contour.Vertices.Num();
+				// FDebugMeshData MeshData;
+				// MeshData.ClusterColor = RandomColor;
+				for (uint32 i = 0; i < VerticesNum; ++i)
+				{
+					const FVector& Start = Contour.Vertices[i];
+					AuxPoints.Emplace(Start, RandomColor, 10.0f);
+					AuxLines.Emplace(Start, Contour.Vertices[(i + 1) % VerticesNum], RandomColor, 2.0f);
+					// MeshData.Vertices.Emplace(Contour.Vertices[i]);
+					// MeshData.Indices.Add(i);
+				}
+				// MeshData.Indices.Add(0);
+				// MeshBuilders.Add(MoveTemp(MeshData));
 			}
 		}
 
@@ -173,6 +199,11 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 		for (const FDebugRenderSceneProxy::FDebugLine& Line : DebuggingInfo.TemporaryLines)
 		{
 			AuxLines.Add(Line);
+		}
+
+		for (const FDebugRenderSceneProxy::FArrowLine& Arrow : DebuggingInfo.TemporaryArrows)
+		{
+			AuxArrows.Add(Arrow);
 		}
 	}
 }
@@ -330,6 +361,13 @@ void FNNNavMeshSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*
 					PDI->DrawLine(Line.Start, Line.End, Line.Color, SDPG_World, Line.Thickness);
 				}
 			}
+
+			// Draw AuxArrows
+			for (int32 Index = 0; Index < ProxyData.AuxArrows.Num(); ++Index)
+			{
+				const auto& Arrow = ProxyData.AuxArrows[Index];
+				NNDrawLineArrow(PDI, Arrow.Start, Arrow.End, Arrow.Color, 10.0f);
+			}
 		}
 	}
 }
@@ -356,6 +394,19 @@ uint32 FNNNavMeshSceneProxy::GetAllocatedSize() const
 		Boxes.GetAllocatedSize() +
 		Spheres.GetAllocatedSize() +
 		Texts.GetAllocatedSize();
+}
+
+void FNNNavMeshSceneProxy::NNDrawLineArrow(FPrimitiveDrawInterface* PDI, const FVector& Start, const FVector& End,
+	const FColor& Color, float Mag) const
+{
+	// draw a pretty arrow
+	FVector Dir = End - Start;
+	const float DirMag = Dir.Size();
+	Dir /= DirMag;
+	FVector YAxis, ZAxis;
+	Dir.FindBestAxisVectors(YAxis,ZAxis);
+	FMatrix ArrowTM(Dir,YAxis,ZAxis,Start);
+	DrawDirectionalArrow(PDI,ArrowTM,Color,DirMag,Mag,SDPG_World);
 }
 
 void FNNNavMeshDebugDrawHelper::InitDelegateHelper(const FNNNavMeshSceneProxy* InSceneProxy)

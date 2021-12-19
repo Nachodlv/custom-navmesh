@@ -66,6 +66,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "NN|Debug|Region")
 	bool bDrawRegions = false;
 
+	/** Whether it should draw the contours around the regions */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|Contour")
+	bool bDrawContours = false;
+
 	/** Whether it should only draw the floor of the OpenHeightField's spans */
 	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization", meta = (EditCondition = "bDrawOpenHeightField"))
 	bool bDrawOpenHeightFieldFloor = false;

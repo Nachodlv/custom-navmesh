@@ -40,6 +40,7 @@ struct NACHONAVMESH_API FNNNavMeshSceneProxyData : public TSharedFromThis<FNNNav
 	TArray<FDebugRenderSceneProxy::FDebugLine> NavLinkLines;
 	TArray<FDebugRenderSceneProxy::FDebugLine> ClusterLinkLines;
 	TArray<FDebugRenderSceneProxy::FDebugLine> AuxLines;
+	TArray<FDebugRenderSceneProxy::FArrowLine> AuxArrows;
 	TArray<FDebugRenderSceneProxy::FDebugBox> AuxBoxes;
 	TArray<FDebugPoint> AuxPoints;
 	TArray<FDebugRenderSceneProxy::FMesh> Meshes;
@@ -91,6 +92,10 @@ protected:
 	virtual uint32 GetMemoryFootprint() const override { return sizeof(*this) + FNNNavMeshSceneProxy::GetAllocatedSize(); }
 	uint32 GetAllocatedSize() const;
 
+	/** Draws a line arrow the draw interface */
+	void NNDrawLineArrow(FPrimitiveDrawInterface* PDI,const FVector &Start,const FVector &End,const FColor &Color,float Mag) const;
+
+
 	TArray<FColoredMaterialRenderProxy> MeshColors;
 	TArray<FMeshBatchElement> MeshBatchElements;
 	FDynamicMeshIndexBuffer32 IndexBuffer;
@@ -122,6 +127,11 @@ struct FNNNavMeshDebuggingInfo
 		RegionDebugInfo(const TArray<FBox>& InSpans) : Spans(InSpans) {}
 		TArray<FBox> Spans;
 	};
+	struct ContourDebugInfo
+	{
+		ContourDebugInfo(const TArray<FVector>& InVertices) : Vertices(InVertices) {}
+		TArray<FVector> Vertices;
+	};
 
 	/** The geometry vertices */
 	TArray<FNNRawGeometryElement> RawGeometryToDraw;
@@ -135,7 +145,9 @@ struct FNNNavMeshDebuggingInfo
 	TArray<FNNNavMeshSceneProxyData::FDebugText> TemporaryTexts;
 	/** Lines for debugging. No specific usage */
 	TArray<FDebugRenderSceneProxy::FDebugLine> TemporaryLines;
+	TArray<FDebugRenderSceneProxy::FArrowLine> TemporaryArrows;
 	TArray<RegionDebugInfo> Regions;
+	TArray<ContourDebugInfo> Contours;
 };
 
 class FNNNavMeshDebugDrawHelper : public FDebugDrawDelegateHelper

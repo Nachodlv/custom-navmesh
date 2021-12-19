@@ -67,6 +67,7 @@ struct FNNAreaGeneratorData
 
 	/** Lines used for debugging */
 	TArray<FDebugRenderSceneProxy::FDebugLine>  TemporaryLines;
+	TArray<FDebugRenderSceneProxy::FArrowLine>  TemporaryArrows;;
 
 	/** Texts used for debugging */
 	TArray<FNNNavMeshSceneProxyData::FDebugText> TemporaryTexts;
@@ -77,6 +78,8 @@ struct FNNAreaGeneratorData
 	void AddDebugText(const FVector& Location, const FString& Text);
 	/** Creates a debug line in the world */
 	void AddDebugLine(const FVector& Start, const FVector& End);
+	/** Creates a debug arrow line in the world */
+	void AddDebugArrow(const FVector& Start, const FVector& End, const FColor& Color);
 };
 
 /** Calculates the nav mesh for a specific FNavigationBounds */
