@@ -34,10 +34,23 @@ protected:
 	void BuildRawContour(FNNOpenSpan* StartSpan, FPlatformTypes::int32 StartDir, TArray<FVector>&
 	                      OutContourVerts, TArray<int32>& OutVertsRegions);
 
+	/** Changes the vertexes from the region.
+	 * For edges that connects non null regions it will remove all vertices except the start and the end vertex
+	 * */
+	void GenerateSimplifiedContour(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions, TArray<FVector>& OutSimplifiedVertexes, TArray<int32>& OutSimplifiedVertexesIndexes) const;
+
 	/** Returns the height that should be used for the parameter Span.
 	 * The vertex clockwise of the specified direction */
 	int32 GetCornerHeight(FNNOpenSpan& Span, int32 Direction) const;
 
+	/** Adds vertexes to the null-region edges. All these vertexes will be closer than the given Threshold from the
+	 * null region edges */
+	static void MatchNullRegionEdges(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions, TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexIndexes);
+
+	/** Add vertexes to a contour sucha that no null region edge segment exceeds the allowed edge length */
+	static void NullRegionMaxEdge(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions, TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexesIndexes);
+
 private:
 	FNNAreaGeneratorData& AreaGeneratorData;
+
 };

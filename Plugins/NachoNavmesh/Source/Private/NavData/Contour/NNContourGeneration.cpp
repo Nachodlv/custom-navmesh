@@ -6,6 +6,16 @@
 
 #define DEBUG_CONTOUR_GENERATION 0
 
+// TODO (Ignacio) move this to a navmesh settings
+namespace NNContourGenerationStaticVariables
+{
+	/** The maximum distance the edge may deviate from the geometry */
+	constexpr float Threshold = 0.5f;
+
+	/** The maximum length of polygon edges that represent the border of the navmesh */
+	constexpr float MaxEdgeLength = 50.0f;
+}
+
 void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField)
 {
 	int32 DiscardedContours = 0;
@@ -43,6 +53,9 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField)
 
 	TArray<FVector> Vertices;
 	TArray<int32> VerticesRegions;
+	TArray<FVector> SimplifiedVertices;
+	TArray<int32> SimplifiedVerticesIndexes;
+	TArray<int32> SimplifiedRegions;
 	for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenHeightField.Spans)
 	{
 		for (FNNOpenSpan* CurrentSpan = OpenSpan.Get(); CurrentSpan; CurrentSpan = CurrentSpan->NextOpenSpan.Get())
@@ -61,9 +74,16 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField)
 			}
 
 			BuildRawContour(CurrentSpan, StartDirection, Vertices, VerticesRegions);
+			GenerateSimplifiedContour(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
+			MatchNullRegionEdges(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
+			NullRegionMaxEdge(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
 
-			OpenHeightField.Contours.Emplace(Vertices);
-			Vertices.Empty();
+			OpenHeightField.Contours.Emplace(SimplifiedVertices);
+			Vertices.Reset();
+			VerticesRegions.Reset();
+			SimplifiedVertices.Reset();
+			SimplifiedVerticesIndexes.Reset();
+			SimplifiedRegions.Reset();
 		}
 	}
 }
@@ -123,6 +143,68 @@ void FNNContourGeneration::BuildRawContour(FNNOpenSpan* StartSpan, int32 StartDi
 	ensureMsgf(false, TEXT("Something went wrong"));
 }
 
+void FNNContourGeneration::GenerateSimplifiedContour(const TArray<FVector>& SourceVertexes,
+	const TArray<int32>& SourceRegions, TArray<FVector>& OutSimplifiedVertexes,
+	TArray<int32>& OutSimplifiedVertexesIndexes) const
+{
+	bool bNoConnections = true;
+	for (const int32 Region : SourceRegions)
+	{
+		if (Region != INDEX_NONE)
+		{
+			bNoConnections = false;
+			break;
+		}
+	}
+
+	// Add the mandatory edges to the simplified contour
+	if (bNoConnections)
+	{
+		int32 LowerLeftIndex = 0;
+		int32 UpperRightIndex = 0;
+		for (int32 i = 0; i < SourceVertexes.Num(); ++i)
+		{
+			const FVector& Vertex = SourceVertexes[i];
+
+			const FVector& LowerLeft = SourceVertexes[LowerLeftIndex];
+			if (Vertex.X < LowerLeft.X || (Vertex.X == LowerLeft.X && Vertex.Y < LowerLeft.Y))
+			{
+				LowerLeftIndex = i;
+			}
+
+			const FVector& UpperRight = SourceVertexes[UpperRightIndex];
+			// TODO (Ignacio) I don't know if I should check (Vertex.X > UpperRight.X) or (Vertex.X >= UpperRight.X)
+			if (Vertex.X > UpperRight.X || (Vertex.X == UpperRight.X && Vertex.Y > UpperRight.Y))
+			{
+				UpperRightIndex = i;
+			}
+		}
+
+		OutSimplifiedVertexes.Add(SourceVertexes[LowerLeftIndex]);
+		OutSimplifiedVertexesIndexes.Add(LowerLeftIndex);
+		OutSimplifiedVertexes.Add(SourceVertexes[UpperRightIndex]);
+		OutSimplifiedVertexesIndexes.Add(UpperRightIndex);
+	}
+	else
+	{
+		// The contour shares edges with other non null regions
+		// Add the vertexes where the region connected changes to the simplified contour
+		for (int32 i = 0; i < SourceVertexes.Num(); ++i)
+		{
+			const int32 CurrentRegion = SourceRegions[i];
+			const int32 NextRegion = SourceRegions[(i + 1) % SourceRegions.Num()];
+			if (CurrentRegion != NextRegion)
+			{
+				OutSimplifiedVertexes.Add(SourceVertexes[i]);
+				OutSimplifiedVertexesIndexes.Add(i);
+			}
+		}
+	}
+
+	ensureMsgf(OutSimplifiedVertexes.Num() > 2, TEXT("Fix for this case is not yet impemented"));
+
+}
+
 int32 FNNContourGeneration::GetCornerHeight(FNNOpenSpan& Span, int32 Direction) const
 {
 	int32 MaxFloor = Span.MinHeight;
@@ -156,6 +238,114 @@ int32 FNNContourGeneration::GetCornerHeight(FNNOpenSpan& Span, int32 Direction) 
 
 	return MaxFloor;
 }
+
+void FNNContourGeneration::MatchNullRegionEdges(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions,
+	TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexIndexes)
+{
+	if (SourceVertexes.Num() == 0)
+	{
+		return;
+	}
+
+	int32 IndexVertexA = 0;
+
+	while (IndexVertexA < SimplifiedVertexes.Num())
+	{
+		const int32 IndexVertexB = (IndexVertexA + 1) % SimplifiedVertexes.Num();
+
+		// The begging of the segment
+		const FVector& VertexA = SimplifiedVertexes[IndexVertexA];
+		const int32 SourceVertexAIndex = SimplifiedVertexIndexes[IndexVertexA];
+
+		// The end of the segment
+		const FVector& VertexB = SimplifiedVertexes[IndexVertexB];
+		const int32 SourceVertexBIndex = SimplifiedVertexIndexes[IndexVertexB];
+
+		// The vertex just after the current vertex in the source vertex list
+		int32 TestVertexIndex = (SourceVertexAIndex + 1) % SourceVertexes.Num();
+		float MaxDeviation = 0.0f;
+
+		int32 VertexIndexToAdd = INDEX_NONE;
+		// The TestVertex is part of a null region edge
+		if (SourceRegions[TestVertexIndex] == INDEX_NONE)
+		{
+			while (TestVertexIndex != SourceVertexBIndex)
+			{
+				const float Deviation = FMath::PointDistToSegmentSquared(SourceVertexes[TestVertexIndex], VertexA, VertexB);
+				if (Deviation > MaxDeviation)
+				{
+					MaxDeviation = Deviation;
+					VertexIndexToAdd = TestVertexIndex;
+				}
+				TestVertexIndex = (TestVertexIndex + 1) % SourceVertexes.Num();
+			}
+		}
+
+		constexpr float Threshold = NNContourGenerationStaticVariables::Threshold;
+		if (VertexIndexToAdd != INDEX_NONE && MaxDeviation > (Threshold * Threshold))
+		{
+			const FVector& VectorToAdd = SourceVertexes[VertexIndexToAdd];
+			SimplifiedVertexes.Insert(VectorToAdd, IndexVertexA + 1);
+			SimplifiedVertexIndexes.Insert(VertexIndexToAdd, IndexVertexA + 1);
+		}
+		else
+		{
+			++IndexVertexA;
+		}
+	}
+}
+
+void FNNContourGeneration::NullRegionMaxEdge(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions,
+	TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexesIndexes)
+{
+	constexpr float MaxEdgeLength = NNContourGenerationStaticVariables::MaxEdgeLength;
+	constexpr float MaxEdgeLengthSqr = MaxEdgeLength * MaxEdgeLength;
+	if (MaxEdgeLength <= 0 || SourceVertexes.Num() == 0)
+	{
+		return;
+	}
+
+	const int32 SourceVertexesNum = SourceVertexes.Num();
+
+	int32 VertexAIndex = 0;
+	// Inserts vertexes into null region edges that are too long
+	// Insets the vertex that is closer to the middle of the edge
+	while (VertexAIndex < SimplifiedVertexes.Num())
+	{
+		const int32 VertexBIndex = (VertexAIndex + 1) % SimplifiedVertexes.Num();
+
+		const FVector& VectorA = SimplifiedVertexes[VertexAIndex];
+		const int32 SourceVectorAIndex = SimplifiedVertexesIndexes[VertexAIndex];
+
+		const FVector& VectorB = SimplifiedVertexes[VertexBIndex];
+		const int32 SourceVectorBIndex = SimplifiedVertexesIndexes[VertexBIndex];
+
+		int32 NewVertexIndex = INDEX_NONE;
+		const int32 TestVertexIndex = (SourceVectorAIndex + 1) % SourceVertexesNum;
+		if (SourceRegions[TestVertexIndex] == INDEX_NONE)
+		{
+			if (FVector::DistSquared(VectorA, VectorB) > MaxEdgeLengthSqr)
+			{
+				// The current edge is too long and needs to be split
+				const int32 IndexDistance = SourceVectorBIndex < SourceVectorAIndex
+					                            ? SourceVectorBIndex + (SourceVertexesNum - SourceVectorAIndex)
+					                            : SourceVectorBIndex - SourceVectorAIndex;
+				NewVertexIndex = (SourceVectorAIndex + IndexDistance / 2) % SourceVertexesNum;
+			}
+		}
+
+		if (NewVertexIndex != INDEX_NONE && NewVertexIndex != SourceVectorAIndex && NewVertexIndex != SourceVectorBIndex)
+		{
+			SimplifiedVertexes.Insert(SourceVertexes[NewVertexIndex], VertexAIndex + 1);
+			SimplifiedVertexesIndexes.Insert(NewVertexIndex, VertexAIndex + 1);
+		}
+		else
+		{
+			++VertexAIndex;
+		}
+	}
+}
+
 
 
 
