@@ -4,10 +4,21 @@
 #include "Kismet/KismetMathLibrary.h"
 
 // NN Includes
+#include "NavData/Contour/NNContourGeneration.h"
 #include "NavData/NNNavMeshRenderingComp.h"
 #include "NavData/Voxelization/HeightFieldGenerator.h"
 #include "NavData/Voxelization/OpenHeightFieldGenerator.h"
 
+namespace NNNavMeshGeneratorHelpers
+{
+	FVector TransformVectorToWorldPosition(const FVector& Vector, const FNNOpenHeightField& OpenHeightField)
+	{
+		const float X = Vector.X * OpenHeightField.CellSize;
+		const float Y = Vector.Y * OpenHeightField.CellSize;
+		const float Z = Vector.Z * OpenHeightField.CellHeight;
+		return OpenHeightField.Bounds.Min + FVector(X, Y, Z);
+	}
+}
 
 FNNNavMeshGenerator::FNNNavMeshGenerator(ANNNavMesh& InNavMesh)
 	: NavMesh(&InNavMesh), NavBounds(InNavMesh.GetRegisteredBounds())
@@ -204,16 +215,22 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		DebuggingInfo.Contours.Reserve(Contours.Num());
 		for (const FNNContour& Contour : Contours)
 		{
-			TArray<FVector> DebugVertexes;
-			for (const FVector& Vertex : Contour.Vertexes)
+			TArray<FVector> DebugSimplifiedVertexes;
+			DebugSimplifiedVertexes.Reserve(Contour.SimplifiedVertexes.Num());
+			for (const FVector& Vertex : Contour.SimplifiedVertexes)
 			{
-				const float X = Vertex.X * OpenHeightField->CellSize;
-				const float Y = Vertex.Y * OpenHeightField->CellSize;
-				const float Z = Vertex.Z * OpenHeightField->CellHeight;
-				FVector WorldVertex = BoundMinPoint + FVector(X, Y, Z);
-				DebugVertexes.Add(MoveTemp(WorldVertex));
+				FVector WorldVertex = NNNavMeshGeneratorHelpers::TransformVectorToWorldPosition(Vertex, *OpenHeightField);
+				DebugSimplifiedVertexes.Add(MoveTemp(WorldVertex));
 			}
-			FNNNavMeshDebuggingInfo::ContourDebugInfo DebugInfo(MoveTemp(DebugVertexes));
+			TArray<FVector> DebugRawVertexes;
+			DebugRawVertexes.Reserve(Contour.RawVertexes.Num());
+			for (const FVector& RawVertex : Contour.RawVertexes)
+			{
+				FVector WorldVertex = NNNavMeshGeneratorHelpers::TransformVectorToWorldPosition(RawVertex, *OpenHeightField);
+				DebugRawVertexes.Add(MoveTemp(WorldVertex));
+			}
+
+			FNNNavMeshDebuggingInfo::ContourDebugInfo DebugInfo(MoveTemp(DebugRawVertexes), MoveTemp(DebugSimplifiedVertexes));
 			DebuggingInfo.Contours.Add(MoveTemp(DebugInfo));
 		}
 	}

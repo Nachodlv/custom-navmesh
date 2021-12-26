@@ -49,6 +49,18 @@ namespace NNNavMeshRenderingCompHelper
 		const int32 B = FMath::RandRange(0, 255);
 		return  FColor(R, G, B, 255);
 	}
+
+	void DrawArrayOfPoints(const TArray<FVector>& InPoints, const FColor& DebugColor,
+		TArray<FNNNavMeshSceneProxyData::FDebugPoint>& OutDebugPoints, TArray<FDebugRenderSceneProxy::FDebugLine>& OutDebugLines)
+	{
+		const uint32 VerticesNum = InPoints.Num();
+		for (uint32 i = 0; i < VerticesNum; ++i)
+		{
+			const FVector& Start = InPoints[i];
+			OutDebugPoints.Emplace(Start, DebugColor, 10.0f);
+			OutDebugLines.Emplace(Start, InPoints[(i + 1) % VerticesNum], DebugColor, 2.0f);
+		}
+	}
 }
 
 void FNNNavMeshSceneProxyData::Reset()
@@ -164,24 +176,17 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 			}
 		}
 
-		if (NavMesh->bDrawContours)
+		// Draw the region contours
+		for (const auto& Contour : DebuggingInfo.Contours)
 		{
-			for (const auto& Contour : DebuggingInfo.Contours)
+			FColor RandomColor = NNNavMeshRenderingCompHelper::GetRandomColor();
+			if (NavMesh->bDrawContours)
 			{
-				FColor RandomColor = NNNavMeshRenderingCompHelper::GetRandomColor();
-				const uint32 VerticesNum = Contour.Vertices.Num();
-				// FDebugMeshData MeshData;
-				// MeshData.ClusterColor = RandomColor;
-				for (uint32 i = 0; i < VerticesNum; ++i)
-				{
-					const FVector& Start = Contour.Vertices[i];
-					AuxPoints.Emplace(Start, RandomColor, 10.0f);
-					AuxLines.Emplace(Start, Contour.Vertices[(i + 1) % VerticesNum], RandomColor, 2.0f);
-					// MeshData.Vertices.Emplace(Contour.Vertices[i]);
-					// MeshData.Indices.Add(i);
-				}
-				// MeshData.Indices.Add(0);
-				// MeshBuilders.Add(MoveTemp(MeshData));
+				NNNavMeshRenderingCompHelper::DrawArrayOfPoints(Contour.SimplifiedVertexes, RandomColor, AuxPoints, AuxLines);
+			}
+			if (NavMesh->bDrawRawVertexesContour)
+			{
+				NNNavMeshRenderingCompHelper::DrawArrayOfPoints(Contour.RawVertexes, RandomColor, AuxPoints, AuxLines);
 			}
 		}
 

@@ -129,8 +129,11 @@ struct FNNNavMeshDebuggingInfo
 	};
 	struct ContourDebugInfo
 	{
-		ContourDebugInfo(const TArray<FVector>& InVertices) : Vertices(InVertices) {}
-		TArray<FVector> Vertices;
+		ContourDebugInfo(const TArray<FVector>& InRawVertexes, const TArray<FVector>& InSimplifiedVertexes)
+			: RawVertexes(InRawVertexes), SimplifiedVertexes(InSimplifiedVertexes) {}
+
+		TArray<FVector> RawVertexes;
+		TArray<FVector> SimplifiedVertexes;
 	};
 
 	/** The geometry vertices */

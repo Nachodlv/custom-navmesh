@@ -70,6 +70,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "NN|Debug|Contour")
 	bool bDrawContours = false;
 
+	/** Whether it should draw the raw vertexes from the regions */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|Contour")
+	bool bDrawRawVertexesContour = false;
+
 	/** Whether it should only draw the floor of the OpenHeightField's spans */
 	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization", meta = (EditCondition = "bDrawOpenHeightField"))
 	bool bDrawOpenHeightFieldFloor = false;

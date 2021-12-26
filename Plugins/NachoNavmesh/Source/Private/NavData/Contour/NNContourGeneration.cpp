@@ -78,7 +78,11 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField)
 			MatchNullRegionEdges(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
 			NullRegionMaxEdge(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
 
-			OpenHeightField.Contours.Emplace(SimplifiedVertices);
+			if (ensureMsgf(SimplifiedVertices.Num() > 2, TEXT("Fix for this case is not yet impemented")))
+			{
+				OpenHeightField.Contours.Emplace(CurrentSpan->RegionID, Vertices, SimplifiedVertices);
+			}
+
 			Vertices.Reset();
 			VerticesRegions.Reset();
 			SimplifiedVertices.Reset();
@@ -200,9 +204,6 @@ void FNNContourGeneration::GenerateSimplifiedContour(const TArray<FVector>& Sour
 			}
 		}
 	}
-
-	ensureMsgf(OutSimplifiedVertexes.Num() > 2, TEXT("Fix for this case is not yet impemented"));
-
 }
 
 int32 FNNContourGeneration::GetCornerHeight(FNNOpenSpan& Span, int32 Direction) const

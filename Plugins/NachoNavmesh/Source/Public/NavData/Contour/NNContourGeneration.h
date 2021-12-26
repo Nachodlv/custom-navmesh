@@ -8,8 +8,11 @@ struct FNNOpenHeightField;
 /** Contains the vertexes of a contour */
 struct FNNContour
 {
-	FNNContour(const TArray<FVector>& InVertexes) : Vertexes(InVertexes) {}
-	TArray<FVector> Vertexes;
+	FNNContour(int32 InRegionID, const TArray<FVector>& InRawVertexes, const TArray<FVector>& InSimplifiedVertexes)
+		: RegionID(InRegionID), RawVertexes(InRawVertexes), SimplifiedVertexes(InSimplifiedVertexes) {}
+	int32 RegionID;
+	TArray<FVector> RawVertexes;
+	TArray<FVector> SimplifiedVertexes;
 	TArray<FNNContour*> Neighbours;
 };
 

@@ -25,7 +25,7 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - [X] Implement the water shed algorithm
   - [X] Filter small regions
   - [X] Clear null region borders
-- [ ] Contour Generation
+- [X] Contour Generation
   - [X] Implement contour generation
   - [X] Simplify the contour
 - [ ] Convex Polygon Generation
