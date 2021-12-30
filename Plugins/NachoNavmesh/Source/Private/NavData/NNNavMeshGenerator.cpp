@@ -211,7 +211,7 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		}
 
 		// Grab the contour debugging info
-		const TArray<FNNContour>& Contours = OpenHeightField->Contours;
+		const TArray<FNNContour>& Contours = Result.Value->Contours;
 		DebuggingInfo.Contours.Reserve(Contours.Num());
 		for (const FNNContour& Contour : Contours)
 		{
@@ -232,6 +232,26 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 
 			FNNNavMeshDebuggingInfo::ContourDebugInfo DebugInfo(MoveTemp(DebugRawVertexes), MoveTemp(DebugSimplifiedVertexes));
 			DebuggingInfo.Contours.Add(MoveTemp(DebugInfo));
+		}
+
+		const FNNPolygonMesh& PolygonMesh = Result.Value->PolygonMesh;
+		DebuggingInfo.MeshTriangulated.Reset(PolygonMesh.PolygonIndexes.Num());
+		for (const FNNPolygon& Polygon : PolygonMesh.PolygonIndexes)
+		{
+			TArray<FVector> Vertexes;
+			TArray<int32> Indexes;
+			Vertexes.Reserve(Polygon.Indexes.Num());
+			for (int32 i = 0; i < Polygon.Indexes.Num(); ++i)
+			{
+				int32 Index = Polygon.Indexes[i];
+				if (Index >= 0)
+				{
+					const FVector& PolygonVector = PolygonMesh.Vertexes[Polygon.Indexes[i]];
+					Vertexes.Add(NNNavMeshGeneratorHelpers::TransformVectorToWorldPosition(PolygonVector, *OpenHeightField));
+					Indexes.Add(i);
+				}
+			}
+ 			DebuggingInfo.MeshTriangulated.Emplace(MoveTemp(Vertexes), MoveTemp(Indexes));
 		}
 	}
 }

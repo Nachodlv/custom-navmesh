@@ -13,10 +13,10 @@ namespace NNContourGenerationStaticVariables
 	constexpr float Threshold = 0.5f;
 
 	/** The maximum length of polygon edges that represent the border of the navmesh */
-	constexpr float MaxEdgeLength = 50.0f;
+	constexpr float MaxEdgeLength = 100.0f;
 }
 
-void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField)
+void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField, TArray<FNNContour>& OutContours)
 {
 	int32 DiscardedContours = 0;
 	for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenHeightField.Spans)
@@ -80,7 +80,7 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField)
 
 			if (ensureMsgf(SimplifiedVertices.Num() > 2, TEXT("Fix for this case is not yet impemented")))
 			{
-				OpenHeightField.Contours.Emplace(CurrentSpan->RegionID, Vertices, SimplifiedVertices);
+				OutContours.Emplace(CurrentSpan->RegionID, Vertices, SimplifiedVertices);
 			}
 
 			Vertices.Reset();

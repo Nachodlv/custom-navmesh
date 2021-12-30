@@ -30,7 +30,7 @@ public:
 	FNNContourGeneration(FNNAreaGeneratorData& InAreaGenerator) : AreaGeneratorData(InAreaGenerator) {}
 
 	/** Calculates the contour of the OpenHeightField and inserts the contour in the height field */
-	void CalculateContour(FNNOpenHeightField& OpenHeightField);
+	void CalculateContour(FNNOpenHeightField& OpenHeightField, TArray<FNNContour>& OutContours);
 
 protected:
 	/** Builds a basic contour for the region of the StartSpan */

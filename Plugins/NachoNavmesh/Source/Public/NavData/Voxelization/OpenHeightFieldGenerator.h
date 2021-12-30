@@ -67,7 +67,6 @@ struct FNNOpenHeightField
 	float CellHeight = 0.0f;
 	int32 AmountOfSpans = 0;
 	TArray<TUniquePtr<FNNOpenSpan>> Spans;
-	TArray<FNNContour> Contours;
 
 	/** The maximum distance from an edge a Span has from the Spans array */
 	int32 SpanMaxEdgeDistance = INDEX_NONE;

@@ -135,6 +135,13 @@ struct FNNNavMeshDebuggingInfo
 		TArray<FVector> RawVertexes;
 		TArray<FVector> SimplifiedVertexes;
 	};
+	struct PolygonDebugInfo
+	{
+		PolygonDebugInfo(const TArray<FVector>& InVertexes, const TArray<int32>& InIndexes)
+			: Vertexes(InVertexes), Indexes(InIndexes) {}
+		TArray<FVector> Vertexes;
+		TArray<int32> Indexes;
+	};
 
 	/** The geometry vertices */
 	TArray<FNNRawGeometryElement> RawGeometryToDraw;
@@ -151,6 +158,7 @@ struct FNNNavMeshDebuggingInfo
 	TArray<FDebugRenderSceneProxy::FArrowLine> TemporaryArrows;
 	TArray<RegionDebugInfo> Regions;
 	TArray<ContourDebugInfo> Contours;
+	TArray<PolygonDebugInfo> MeshTriangulated;
 };
 
 class FNNNavMeshDebugDrawHelper : public FDebugDrawDelegateHelper

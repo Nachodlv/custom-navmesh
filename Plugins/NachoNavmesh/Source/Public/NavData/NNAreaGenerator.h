@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 // NN Includes
+#include "Contour/NNContourGeneration.h"
+#include "ConvexPolygon/NNPolyMeshBuilder.h"
 #include "NNNavMeshRenderingComp.h"
 
 struct FNNHeightField;
@@ -61,6 +63,10 @@ struct FNNAreaGeneratorData
 	TUniquePtr<FNNHeightField> HeightField = nullptr;
 
 	TUniquePtr<FNNOpenHeightField> OpenHeightField = nullptr;
+
+	TArray<FNNContour> Contours;
+
+	FNNPolygonMesh PolygonMesh;
 
 	/** BoxSpheres used for debugging */
 	TArray<FBoxSphereBounds> TemporaryBoxSpheres;

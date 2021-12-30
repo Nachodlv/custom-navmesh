@@ -33,7 +33,8 @@ public class NachoNavmesh : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"RenderCore",
-			"RHI"
+			"RHI",
+			"GeometricObjects",
 		});
 
 		DynamicallyLoadedModuleNames.AddRange(

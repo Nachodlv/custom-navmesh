@@ -97,7 +97,11 @@ void FNNAreaGenerator::DoWork()
 
 	// Generate Contour
 	FNNContourGeneration ContourGeneration (*AreaGeneratorData);
-	ContourGeneration.CalculateContour(*AreaGeneratorData->OpenHeightField);
+	ContourGeneration.CalculateContour(*AreaGeneratorData->OpenHeightField, AreaGeneratorData->Contours);
+
+	// Triangulate Contour
+	FNNPolyMeshBuilder MeshBuilder;
+	MeshBuilder.GenerateConvexPolygon(AreaGeneratorData->Contours, AreaGeneratorData->PolygonMesh);
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)

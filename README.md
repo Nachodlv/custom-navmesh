@@ -29,7 +29,11 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - [X] Implement contour generation
   - [X] Simplify the contour
 - [ ] Convex Polygon Generation
+  - [X] Triangulate contours
+  - [ ] Merge triangles to form convex polygons
 - [ ] Detail Mesh Generation
+- [ ] Implement pathfinding
 
 ## Improves
 - [ ] Refactor the distance field generation
+- [ ] Profile
