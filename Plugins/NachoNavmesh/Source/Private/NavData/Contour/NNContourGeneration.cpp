@@ -66,8 +66,7 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField,
 			MatchNullRegionEdges(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
 			NullRegionMaxEdge(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
 
-			// TODO (ignacio) this is happening frequently I should fix it
-			if (ensureMsgf(SimplifiedVertices.Num() > 2, TEXT("Fix for this case is not yet impemented")))
+			if (SimplifiedVertices.Num() > 2)
 			{
 				OutContours.Emplace(CurrentSpan->RegionID, Vertices, SimplifiedVertices);
 			}

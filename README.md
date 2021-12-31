@@ -36,4 +36,5 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
 
 ## Improves
 - [ ] Refactor the distance field generation
+- [ ] Replace unreal triangulation with custom one without using ear clipping
 - [ ] Profile

@@ -63,17 +63,15 @@ void FNNPolyMeshBuilder::GenerateConvexPolygon(const TArray<FNNContour>& Contour
 		check(Contour.SimplifiedVertexes.Num() > 2);
 
 		TArray<FVector2<float>> Vectors;
-		TArray<FVector3<float>> Vectors3D;
 		Vectors.Reserve(Contour.SimplifiedVertexes.Num());
-		Vectors3D.Reserve(Contour.SimplifiedVertexes.Num());
 		for (const FVector& SimplifiedVertex : Contour.SimplifiedVertexes)
 		{
 			Vectors.Add(FVector2<float>(SimplifiedVertex.X, SimplifiedVertex.Y));
-			Vectors3D.Add(SimplifiedVertex);
 		}
 		TArray<FIndex3i> Triangles;
-		// PolygonTriangulation::TriangulateSimplePolygon(Vectors, Triangles);
-		PolygonTriangulation::TriangulateSimplePolygon(Vectors3D, Triangles);
+		// TODO (Ignacio) This triangulation is generating some bugs because is using Ear Clipping
+		// We might need to change this in the future
+		PolygonTriangulation::TriangulateSimplePolygon(Vectors, Triangles);
 		for (const FIndex3i& Triangle : Triangles)
 		{
 			const FVector& VertexA = Contour.SimplifiedVertexes[Triangle.A];

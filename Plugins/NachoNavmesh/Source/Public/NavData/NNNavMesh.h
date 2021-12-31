@@ -78,6 +78,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "NN|Debug|Voxelization", meta = (EditCondition = "bDrawOpenHeightField"))
 	bool bDrawOpenHeightFieldFloor = false;
 
+	/** Whether it should draw the polygon mesh */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|PolyMesh")
+	bool bDrawPolygonMesh = false;
+
+	/** Whether it should draw the mesh without merging the triangles */
+	UPROPERTY(EditAnywhere, Category = "NN|Debug|PolyMesh")
+	bool bDrawPolyMeshTriangles = false;
+
 	/** Size of the tallest agent that will path with this navmesh. */
 	UPROPERTY(EditAnywhere, Category = "NN|Config")
 	float AgentHeight;
