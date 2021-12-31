@@ -158,7 +158,9 @@ struct FNNNavMeshDebuggingInfo
 	TArray<FDebugRenderSceneProxy::FArrowLine> TemporaryArrows;
 	TArray<RegionDebugInfo> Regions;
 	TArray<ContourDebugInfo> Contours;
+	/** Mesh info only used to draw the PolygonMesh */
 	TArray<PolygonDebugInfo> MeshTriangulated;
+	TArray<PolygonDebugInfo> PolygonMesh;
 };
 
 class FNNNavMeshDebugDrawHelper : public FDebugDrawDelegateHelper

@@ -6,19 +6,8 @@
 
 #define DEBUG_CONTOUR_GENERATION 0
 
-// TODO (Ignacio) move this to a navmesh settings
-namespace NNContourGenerationStaticVariables
-{
-	/** The maximum distance the edge may deviate from the geometry */
-	constexpr float Threshold = 0.5f;
-
-	/** The maximum length of polygon edges that represent the border of the navmesh */
-	constexpr float MaxEdgeLength = 100.0f;
-}
-
 void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField, TArray<FNNContour>& OutContours)
 {
-	int32 DiscardedContours = 0;
 	for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenHeightField.Spans)
 	{
 		for (FNNOpenSpan* CurrentSpan = OpenSpan.Get(); CurrentSpan; CurrentSpan = CurrentSpan->NextOpenSpan.Get())
@@ -43,7 +32,6 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField,
 			if (CurrentSpan->NeighbourFlags == 0xf)
 			{
 				CurrentSpan->NeighbourFlags = 0;
-				++DiscardedContours;
 			}
 #if DEBUG_CONTOUR_GENERATION
 			AreaGeneratorData.AddDebugText(CurrentSpan->GetOpenSpanWorldPosition(OpenHeightField), FString::FromInt(CurrentSpan->NeighbourFlags));
@@ -78,6 +66,7 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField,
 			MatchNullRegionEdges(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
 			NullRegionMaxEdge(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
 
+			// TODO (ignacio) this is happening frequently I should fix it
 			if (ensureMsgf(SimplifiedVertices.Num() > 2, TEXT("Fix for this case is not yet impemented")))
 			{
 				OutContours.Emplace(CurrentSpan->RegionID, Vertices, SimplifiedVertices);
@@ -241,7 +230,7 @@ int32 FNNContourGeneration::GetCornerHeight(FNNOpenSpan& Span, int32 Direction) 
 }
 
 void FNNContourGeneration::MatchNullRegionEdges(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions,
-	TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexIndexes)
+	TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexIndexes) const
 {
 	if (SourceVertexes.Num() == 0)
 	{
@@ -282,8 +271,7 @@ void FNNContourGeneration::MatchNullRegionEdges(const TArray<FVector>& SourceVer
 			}
 		}
 
-		constexpr float Threshold = NNContourGenerationStaticVariables::Threshold;
-		if (VertexIndexToAdd != INDEX_NONE && MaxDeviation > (Threshold * Threshold))
+		if (VertexIndexToAdd != INDEX_NONE && MaxDeviation > (ContourDeviationThreshold * ContourDeviationThreshold))
 		{
 			const FVector& VectorToAdd = SourceVertexes[VertexIndexToAdd];
 			SimplifiedVertexes.Insert(VectorToAdd, IndexVertexA + 1);
@@ -297,10 +285,9 @@ void FNNContourGeneration::MatchNullRegionEdges(const TArray<FVector>& SourceVer
 }
 
 void FNNContourGeneration::NullRegionMaxEdge(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions,
-	TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexesIndexes)
+	TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexesIndexes) const
 {
-	constexpr float MaxEdgeLength = NNContourGenerationStaticVariables::MaxEdgeLength;
-	constexpr float MaxEdgeLengthSqr = MaxEdgeLength * MaxEdgeLength;
+	const float MaxEdgeLengthSqr = MaxEdgeLength * MaxEdgeLength;
 	if (MaxEdgeLength <= 0 || SourceVertexes.Num() == 0)
 	{
 		return;

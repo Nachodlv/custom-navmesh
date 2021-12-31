@@ -92,11 +92,11 @@ void FNNAreaGenerator::DoWork()
 	OpenHeightFieldGenerator.GenerateOpenHeightField(*AreaGeneratorData->OpenHeightField, *AreaGeneratorData->HeightField, NavMesh->MaxLedgeHeight, NavMesh->AgentHeight);
 
 	// Generate Regions for the Open HeightField
-	const FNNRegionGenerator RegionGenerator;
+	constexpr FNNRegionGenerator RegionGenerator;
 	RegionGenerator.CreateRegions(*AreaGeneratorData->OpenHeightField, NavMesh->MinRegionSize);
 
 	// Generate Contour
-	FNNContourGeneration ContourGeneration (*AreaGeneratorData);
+	FNNContourGeneration ContourGeneration (*AreaGeneratorData, NavMesh->ContourDeviationThreshold, NavMesh->MaxEdgeLength);
 	ContourGeneration.CalculateContour(*AreaGeneratorData->OpenHeightField, AreaGeneratorData->Contours);
 
 	// Triangulate Contour

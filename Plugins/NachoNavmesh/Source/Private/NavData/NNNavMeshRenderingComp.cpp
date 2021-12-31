@@ -191,14 +191,17 @@ void FNNNavMeshSceneProxyData::GatherData(const ANNNavMesh* NavMesh)
 		}
 
 		// Draw the triangulated mesh
-		for (FNNNavMeshDebuggingInfo::PolygonDebugInfo& MeshTriangulated : DebuggingInfo.MeshTriangulated)
+		for (const FNNNavMeshDebuggingInfo::PolygonDebugInfo& MeshTriangulated : DebuggingInfo.MeshTriangulated)
 		{
 			FDebugMeshData MeshData;
 			MeshData.Vertices.Append(MeshTriangulated.Vertexes);
 			MeshData.Indices.Append(MeshTriangulated.Indexes);
 			MeshData.ClusterColor = FColor::Green;
 			MeshBuilders.Add(MoveTemp(MeshData));
-			NNNavMeshRenderingCompHelper::DrawArrayOfPoints(MeshTriangulated.Vertexes, FColor::Blue, AuxPoints, AuxLines);
+		}
+		for (const FNNNavMeshDebuggingInfo::PolygonDebugInfo& PolygonMesh : DebuggingInfo.PolygonMesh)
+		{
+			NNNavMeshRenderingCompHelper::DrawArrayOfPoints(PolygonMesh.Vertexes, FColor::Blue, AuxPoints, AuxLines);
 		}
 
 		// Gather the BoxSpheresTemporary

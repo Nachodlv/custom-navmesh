@@ -100,4 +100,15 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "NN|Config")
 	float MinRegionSize = 50.0f;
+
+	/** The maximum distance the edge may deviate from the geometry */
+	UPROPERTY(EditAnywhere, Category = "NN|Config|Contour")
+	float ContourDeviationThreshold = 0.5f;
+
+	/** The maximum length of polygon edges that represent the border of the navmesh */
+	UPROPERTY(EditAnywhere, Category = "NN|Config|Contour")
+	float MaxEdgeLength = 100.0f;
+
+protected:
+	virtual void PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent) override;
 };

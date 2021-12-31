@@ -54,3 +54,9 @@ FBox ANNNavMesh::GetNavMeshBounds() const
 	}
 	return TotalBounds;
 }
+
+void ANNNavMesh::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeChainProperty(PropertyChangedEvent);
+	RebuildAll();
+}

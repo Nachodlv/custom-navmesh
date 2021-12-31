@@ -27,7 +27,8 @@ class FNNContourGeneration
 {
 
 public:
-	FNNContourGeneration(FNNAreaGeneratorData& InAreaGenerator) : AreaGeneratorData(InAreaGenerator) {}
+	FNNContourGeneration(FNNAreaGeneratorData& InAreaGenerator, float InDeviationThreshold, float InMaxEdgeLength)
+		: AreaGeneratorData(InAreaGenerator), ContourDeviationThreshold(InDeviationThreshold), MaxEdgeLength(InMaxEdgeLength) {}
 
 	/** Calculates the contour of the OpenHeightField and inserts the contour in the height field */
 	void CalculateContour(FNNOpenHeightField& OpenHeightField, TArray<FNNContour>& OutContours);
@@ -48,12 +49,17 @@ protected:
 
 	/** Adds vertexes to the null-region edges. All these vertexes will be closer than the given Threshold from the
 	 * null region edges */
-	static void MatchNullRegionEdges(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions, TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexIndexes);
+	void MatchNullRegionEdges(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions, TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexIndexes) const;
 
 	/** Add vertexes to a contour sucha that no null region edge segment exceeds the allowed edge length */
-	static void NullRegionMaxEdge(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions, TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexesIndexes);
+	void NullRegionMaxEdge(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions, TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexesIndexes) const;
 
 private:
 	FNNAreaGeneratorData& AreaGeneratorData;
 
+	/** The maximum distance the edge may deviate from the geometry */
+	float ContourDeviationThreshold = 0.0f;
+
+	/** The maximum length of polygon edges that represent the border of the navmesh */
+	float MaxEdgeLength = 0.0f;
 };

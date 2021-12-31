@@ -18,6 +18,25 @@ namespace NNNavMeshGeneratorHelpers
 		const float Z = Vector.Z * OpenHeightField.CellHeight;
 		return OpenHeightField.Bounds.Min + FVector(X, Y, Z);
 	}
+
+	FNNNavMeshDebuggingInfo::PolygonDebugInfo BuildDebugInfoFromPolygon(
+		const FNNOpenHeightField& OpenHeightField, const FNNPolygonMesh& PolygonMesh, const FNNPolygon& Polygon)
+	{
+		TArray<FVector> Vertexes;
+		TArray<int32> Indexes;
+		Vertexes.Reserve(Polygon.Indexes.Num());
+		for (int32 i = 0; i < Polygon.Indexes.Num(); ++i)
+		{
+			const int32 Index = Polygon.Indexes[i];
+			if (Index >= 0)
+			{
+				const FVector& PolygonVector = PolygonMesh.Vertexes[Polygon.Indexes[i]];
+				Vertexes.Add(TransformVectorToWorldPosition(PolygonVector, OpenHeightField));
+				Indexes.Add(i);
+			}
+		}
+		return FNNNavMeshDebuggingInfo::PolygonDebugInfo(Vertexes, Indexes);
+	}
 }
 
 FNNNavMeshGenerator::FNNNavMeshGenerator(ANNNavMesh& InNavMesh)
@@ -236,22 +255,15 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 
 		const FNNPolygonMesh& PolygonMesh = Result.Value->PolygonMesh;
 		DebuggingInfo.MeshTriangulated.Reset(PolygonMesh.PolygonIndexes.Num());
+		for (const FNNPolygon& Triangle : PolygonMesh.TriangleIndexes)
+		{
+			FNNNavMeshDebuggingInfo::PolygonDebugInfo DebugInfo = NNNavMeshGeneratorHelpers::BuildDebugInfoFromPolygon(*OpenHeightField, PolygonMesh, Triangle);
+			DebuggingInfo.MeshTriangulated.Add(MoveTemp(DebugInfo));
+		}
 		for (const FNNPolygon& Polygon : PolygonMesh.PolygonIndexes)
 		{
-			TArray<FVector> Vertexes;
-			TArray<int32> Indexes;
-			Vertexes.Reserve(Polygon.Indexes.Num());
-			for (int32 i = 0; i < Polygon.Indexes.Num(); ++i)
-			{
-				int32 Index = Polygon.Indexes[i];
-				if (Index >= 0)
-				{
-					const FVector& PolygonVector = PolygonMesh.Vertexes[Polygon.Indexes[i]];
-					Vertexes.Add(NNNavMeshGeneratorHelpers::TransformVectorToWorldPosition(PolygonVector, *OpenHeightField));
-					Indexes.Add(i);
-				}
-			}
- 			DebuggingInfo.MeshTriangulated.Emplace(MoveTemp(Vertexes), MoveTemp(Indexes));
+			FNNNavMeshDebuggingInfo::PolygonDebugInfo DebugInfo = NNNavMeshGeneratorHelpers::BuildDebugInfoFromPolygon(*OpenHeightField, PolygonMesh, Polygon);
+			DebuggingInfo.PolygonMesh.Add(MoveTemp(DebugInfo));
 		}
 	}
 }
