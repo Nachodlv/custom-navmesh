@@ -39,4 +39,4 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
 - [ ] Replace unreal triangulation with custom one without using ear clipping
 - [ ] Profile
 - [ ] Make navmesh generation asynchronous
-- [ ] Rebuild only the dirty area and not all the navmesh
+- [X] Rebuild only the dirty area and not all the navmesh

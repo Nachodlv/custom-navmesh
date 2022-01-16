@@ -64,8 +64,16 @@ bool FNNNavMeshGenerator::RebuildAll()
 
 void FNNNavMeshGenerator::RebuildDirtyAreas(const TArray<FNavigationDirtyArea>& NavigationDirtyAreas)
 {
-	// TODO (ignacio) I probably want to rebuild only the dirty areas
-	RebuildAll();
+	for (const FNavigationDirtyArea& NavigationDirtyArea : NavigationDirtyAreas)
+	{
+		for (const FNavigationBounds& NavBound : NavBounds)
+		{
+			if (NavBound.AreaBox.Intersect(NavigationDirtyArea.Bounds))
+			{
+				DirtyAreas.Add(NavBound.UniqueID);
+			}
+		}
+	}
 }
 
 FNNAreaGenerator* FNNNavMeshGenerator::CreateAreaGenerator(const FNavigationBounds& DirtyArea)
