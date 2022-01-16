@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+struct FNNOpenHeightField;
 struct FNNAreaGeneratorData;
 struct FNNContour;
 struct FNNHeightField;
@@ -34,6 +35,8 @@ struct FNNOpenSpan
 	TUniquePtr<FNNOpenSpan> NextOpenSpan = nullptr;
 	/** The distance of this span to an edge */
 	int32 EdgeDistance = INDEX_NONE;
+	/** Distance to the region center it belongs to */
+	int32 DistanceCoreDistance = INDEX_NONE;
 	/** The region identifier this span belongs to */
 	int32 RegionID = INDEX_NONE;
 	int32 Flags = ENNOpenSpanFlags::None;
@@ -57,6 +60,8 @@ struct FNNOpenSpan
 
 struct FNNOpenHeightField
 {
+	typedef struct FNNOpenHeightFieldIterator FIterator;
+
 	FNNOpenHeightField() {}
 	FNNOpenHeightField(int32 InUnitsWidth, int32 InUnitsDepth, int32 InUnitsHeight);
 	int32 UnitsWidth = INDEX_NONE;
@@ -68,18 +73,50 @@ struct FNNOpenHeightField
 	int32 AmountOfSpans = 0;
 	TArray<TUniquePtr<FNNOpenSpan>> Spans;
 
-	/** The maximum distance from an edge a Span has from the Spans array */
-	int32 SpanMaxEdgeDistance = INDEX_NONE;
 	/** The regions that this OpenHeightFieldContains */
 	TArray<FNNRegion> Regions;
 
 	int32 GetRegionIndexByID(int32 ID) const;
+	int32 GetSpanMaxEdgeDistance() const;
+	int32 GetSpanMinEdgeDistance() const;
+
+private:
+	/** The maximum distance from an edge a Span has from the Spans array */
+	mutable int32 SpanMaxEdgeDistance = INDEX_NONE;
+	mutable int32 SpanMinEdgeDistance = INDEX_NONE;
+
+	void CalculateSpanEdgeDistances() const;
+};
+
+/** Iterates through all the Spans from an FNNOpenHeightField */
+struct FNNOpenHeightFieldIterator
+{
+	FNNOpenHeightFieldIterator(const FNNOpenHeightField& InOpenHeightField);
+
+	FNNOpenSpan* Get() const { return CurrentSpan; }
+
+	explicit operator bool() const { return CurrentIndex < OpenHeightField.Spans.Num(); }
+
+	void operator++();
+
+	FNNOpenSpan* operator*() const { return CurrentSpan; }
+
+	FNNOpenSpan* operator->() const { return CurrentSpan; }
+
+protected:
+	FNNOpenSpan* GetNextValidOpenSpan();
+
+private:
+	int32 CurrentIndex = INDEX_NONE;
+	FNNOpenSpan* CurrentSpan = nullptr;
+	const FNNOpenHeightField& OpenHeightField;
 };
 
 struct FNNRegion
 {
 	FNNRegion(int32 InID) : ID(InID) {}
 	int32 ID = INDEX_NONE;
+	// TODO (ignacio) check if we can remove this array
 	TArray<FNNOpenSpan*> Spans;
 	static FNNRegion GenerateNewRegion();
 };
@@ -93,12 +130,10 @@ public:
 	void GenerateOpenHeightField(FNNOpenHeightField& OutOpenHeightField, const FNNHeightField& SolidHeightField, float MaxLedgeHeight, float AgentHeight) const;
 
 protected:
-	/** Get the edge from the OpenSpan to its nearest edge */
-	int32 GetOpenSpanEdgeDistance(const FNNOpenSpan* OpenSpan) const;
-
 	/** Sets the OpenSpan neighbours */
 	void SetOpenSpanNeighbours(FNNOpenHeightField& OutOpenHeightField, const TArray<FVector2D>& PossibleNeighbours, FNNOpenSpan* OpenSpan, float MaxLedgeHeight, float AgentHeight) const;
 
+	void GenerateDistanceField(FNNOpenHeightField& OpenHeightField) const;
 private:
 	FNNAreaGeneratorData& AreaGeneratorData;
 };

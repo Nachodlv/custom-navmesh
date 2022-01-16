@@ -35,6 +35,8 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
 - [ ] Implement pathfinding
 
 ## Improves
-- [ ] Refactor the distance field generation
+- [X] Refactor the distance field generation
 - [ ] Replace unreal triangulation with custom one without using ear clipping
 - [ ] Profile
+- [ ] Make navmesh generation asynchronous
+- [ ] Rebuild only the dirty area and not all the navmesh

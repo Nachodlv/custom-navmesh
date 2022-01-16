@@ -7,16 +7,14 @@ struct FNNRegion;
 class FNNRegionGenerator
 {
 public:
-	/** Initializes the regions of the open spans with a watershed algorithm */
-	void CreateRegions(FNNOpenHeightField& OpenHeightField, float MinRegionSize) const;
+	void CreateRegions(FNNOpenHeightField& OpenHeightField, float MinRegionSize, int32 TraversableAreaBorderSize) const;
 
 protected:
-	/** Sets the region to the CurrentSpan neighbours with the same WaterLevel */
-	void FloodRegion(FNNOpenSpan* CurrentSpan, FNNRegion& Region, int32 CurrentWaterLevel) const;
-
-	/** Grows the current regions created equally */
-	void GrowRegions(FNNOpenHeightField& OpenHeightField, int32 CurrentWaterLevel) const;
-
-	/** Deletes or combines regions with less than te MinSpansForRegions */
 	void FilterSmallRegions(TArray<FNNRegion>& Regions, int32 MinSpansForRegions) const;
+
+	bool FloodNewRegion(FNNOpenSpan* RootSpan, int32 FillToDistance, TArray<FNNOpenSpan*>& WorkingStack, FNNRegion& NewRegion) const;
+
+	/** Tries to find the most appropriate regions to attach spans to. Any span successfully assigned a region will
+	 * be set to null in the Spans array */
+	void ExpandRegions(TMap<int32, FNNRegion>& RegionsByID, TArray<FNNOpenSpan*>& Spans, int32 MaxIterations) const;
 };

@@ -3,106 +3,90 @@
 #include "NavData/Regions/CleanNullRegionBorders.h"
 #include "NavData/Voxelization/OpenHeightFieldGenerator.h"
 
-namespace
+
+void FNNRegionGenerator::CreateRegions(FNNOpenHeightField& OpenHeightField, float MinRegionSize, int32 TraversableAreaBorderSize) const
 {
-	void GetNeighboursToFlood(FNNOpenSpan* Span, int32 CurrentWaterLevel, TArray<FNNOpenSpan*>& SpansToFlood)
+	const int32 MinDist = TraversableAreaBorderSize + OpenHeightField.GetSpanMinEdgeDistance();
+	const int32 ExpandIterations = 4 + (TraversableAreaBorderSize * 2); // ???
+
+	// The current distance from the border that are we currently searching
+	// The distance starts at the maximum distance and moves towards 0
+	// It should always be divisible by 2
+	int32 Dist = (OpenHeightField.GetSpanMaxEdgeDistance() - 1) & ~1;
+
+	// These spans are flooded and ready to be processed
+	TArray<FNNOpenSpan*> FloodedSpans;
+	FloodedSpans.Reserve(1024);
+
+	TArray<FNNOpenSpan*> WorkingStack;
+	WorkingStack.Reserve(1024);
+
+	FNNRegion NewRegion = FNNRegion::GenerateNewRegion();
+	TMap<int32, FNNRegion> RegionsByID;
+	RegionsByID.Add(NewRegion.ID, NewRegion);
+
+	// Iterates until the distance reached the minimum allowed distance
+	while (Dist > MinDist)
 	{
-		for (FNNOpenSpan* Neighbour : Span->Neighbours)
+		FloodedSpans.Reset();
+		// Finds all the spans that are below the current "water level" and don't have a region assigned
+		for (FNNOpenHeightFieldIterator It (OpenHeightField); It; ++It)
 		{
-			if (Neighbour && Neighbour->RegionID == INDEX_NONE && Neighbour->EdgeDistance == CurrentWaterLevel)
+			FNNOpenSpan* CurrentSpan = It.Get();
+			if (CurrentSpan->RegionID == INDEX_NONE && CurrentSpan->EdgeDistance >= Dist)
 			{
-				SpansToFlood.Add(Neighbour);
+				FloodedSpans.Add(CurrentSpan);
 			}
 		}
-	}
-}
 
-void FNNRegionGenerator::CreateRegions(FNNOpenHeightField& OpenHeightField, float MinRegionSize) const
-{
-	const int32 MinSpansForRegions = FMath::CeilToInt(MinRegionSize / OpenHeightField.CellSize);
-
-	TArray<FNNRegion>& Regions = OpenHeightField.Regions;
-	for (int32 WaterLevel = OpenHeightField.SpanMaxEdgeDistance; WaterLevel > 0; --WaterLevel)
-	{
-		// Grow regions
-		GrowRegions(OpenHeightField, WaterLevel);
-
-		// Create new regions
-		for (int32 i = 0; i < OpenHeightField.Spans.Num(); ++i)
+		if (RegionsByID.Num() > 1)
 		{
-			FNNOpenSpan* OpenSpan = OpenHeightField.Spans[i].Get();
-			while (OpenSpan)
-			{
-				if (OpenSpan->EdgeDistance == WaterLevel && OpenSpan->RegionID == INDEX_NONE)
-				{
-					FNNRegion& NewRegion = Regions.Emplace_GetRef(FNNRegion::GenerateNewRegion());
-					FloodRegion(OpenSpan, NewRegion, WaterLevel);
-				}
-				OpenSpan = OpenSpan->NextOpenSpan.Get();
-			}
+			ExpandRegions(RegionsByID, FloodedSpans, Dist > 0 ? ExpandIterations : -1);
 		}
-	}
 
-	FilterSmallRegions(Regions, MinSpansForRegions);
-	FNNCleanNullRegionBorders CleanNullRegionBorders (OpenHeightField);
-	CleanNullRegionBorders.CleanNullRegionBorders();
-}
-
-void FNNRegionGenerator::GrowRegions(FNNOpenHeightField& OpenHeightField, int32 CurrentWaterLevel) const
-{
-	TArray<FNNRegion>& Regions = OpenHeightField.Regions;
-	TMap<int32, TArray<FNNOpenSpan*>> SpansToFloodByRegion;
-
-	for (int32 i = 0; i < Regions.Num(); ++i)
-	{
-		FNNRegion& Region = Regions[i];
-		TArray<FNNOpenSpan*> SpansToFlood;
-		for (FNNOpenSpan* Span : Region.Spans)
+		for (FNNOpenSpan* FloodedSpan : FloodedSpans)
 		{
-			// Was the Span just flooded?
-			if (Span->EdgeDistance == CurrentWaterLevel + 1)
-			{
-				TArray<FNNOpenSpan*> NeighboursToFlood;
-				GetNeighboursToFlood(Span, CurrentWaterLevel, NeighboursToFlood);
-				SpansToFlood.Append(NeighboursToFlood);
-			}
-		}
-		SpansToFloodByRegion.Add(Region.ID, SpansToFlood);
-	}
-
-	while (SpansToFloodByRegion.Num() > 0)
-	{
-		// We fill the Regions equally
-		for (FNNRegion& Region : Regions)
-		{
-			TArray<FNNOpenSpan*>* SpansToFloodPointer = SpansToFloodByRegion.Find(Region.ID);
-			if (!SpansToFloodPointer)
+			if (!FloodedSpan || FloodedSpan->RegionID != INDEX_NONE)
 			{
 				continue;
 			}
 
-			TArray<FNNOpenSpan*> NextSpansToFlood;
-			for (FNNOpenSpan* Span : *SpansToFloodPointer)
+			// Fill slightly more than the current "water level". This should improve the efficiency of the algorithm
+			const int32 FillTo = FMath::Min(Dist - 2, MinDist);
+			if (FloodNewRegion(FloodedSpan, FillTo, WorkingStack, NewRegion))
 			{
-				if (Span->RegionID == INDEX_NONE)
-				{
-					Span->RegionID = Region.ID;
-					Region.Spans.Add(Span);
-					TArray<FNNOpenSpan*> NeighboursToFlood;
-					GetNeighboursToFlood(Span, CurrentWaterLevel, NeighboursToFlood);
-					NextSpansToFlood.Append(NeighboursToFlood);
-				}
-			}
-			if (NextSpansToFlood.Num() == 0)
-			{
-				SpansToFloodByRegion.Remove(Region.ID);
-			}
-			else
-			{
-				SpansToFloodByRegion.Add(Region.ID, NextSpansToFlood);
+				RegionsByID.Add(NewRegion.ID, MoveTemp(NewRegion));
+				NewRegion = FNNRegion::GenerateNewRegion();
 			}
 		}
+
+		Dist = FMath::Max(Dist - 2, 0);
 	}
+
+	// Find all the spans remaining without region
+	FloodedSpans.Reset();
+	for (FNNOpenHeightFieldIterator It (OpenHeightField); It; ++It)
+	{
+		if (It->EdgeDistance >= MinDist && It->RegionID == INDEX_NONE)
+		{
+			FloodedSpans.Add(*It);
+		}
+	}
+
+	// Perform a final region expansion. Allow more iterations than the previous ones
+	ExpandRegions(RegionsByID, FloodedSpans, MinDist > 0 ? ExpandIterations * 8 : -1);
+
+	OpenHeightField.Regions.Reserve(RegionsByID.Num());
+	 for (auto& RegionByID : RegionsByID)
+	 {
+		 OpenHeightField.Regions.Add(MoveTemp(RegionByID.Value));
+	 }
+
+	const int32 MinSpansForRegions = FMath::CeilToInt(MinRegionSize / OpenHeightField.CellSize);
+	// TODO (ignacio) we are creating the region mapping inside this function
+	FilterSmallRegions(OpenHeightField.Regions, MinSpansForRegions);
+	FNNCleanNullRegionBorders CleanNullRegionBorders (OpenHeightField);
+	CleanNullRegionBorders.CleanNullRegionBorders();
 }
 
 void FNNRegionGenerator::FilterSmallRegions(TArray<FNNRegion>& Regions, int32 MinSpansForRegions) const
@@ -166,15 +150,154 @@ void FNNRegionGenerator::FilterSmallRegions(TArray<FNNRegion>& Regions, int32 Mi
 	}
 }
 
-void FNNRegionGenerator::FloodRegion(FNNOpenSpan* CurrentSpan, FNNRegion& Region, int32 CurrentWaterLevel) const
+bool FNNRegionGenerator::FloodNewRegion(FNNOpenSpan* RootSpan, int32 FillToDistance, TArray<FNNOpenSpan*>& WorkingStack, FNNRegion& NewRegion) const
 {
-	Region.Spans.Add(CurrentSpan);
-	CurrentSpan->RegionID = Region.ID;
-	for (FNNOpenSpan* Neighbour : CurrentSpan->Neighbours)
+	WorkingStack.Reset();
+
+	WorkingStack.Add(RootSpan);
+	NewRegion.Spans.Add(RootSpan);
+	RootSpan->RegionID = NewRegion.ID;
+	RootSpan->DistanceCoreDistance = 0;
+
+	int32 RegionSize = 0;
+	while (WorkingStack.Num() > 0)
 	{
-		if (Neighbour && Neighbour->RegionID == INDEX_NONE && Neighbour->EdgeDistance == CurrentWaterLevel)
+		FNNOpenSpan* Span = WorkingStack.Pop();
+
+		bool bOnRegionBorder = false;
+		for (int32 Dir = 0; Dir < 4; ++Dir)
 		{
-			FloodRegion(Neighbour, Region, CurrentWaterLevel);
+			FNNOpenSpan* Neighbour = Span->Neighbours[Dir];
+			if (!Neighbour)
+			{
+				continue;
+			}
+
+			if (Neighbour->RegionID != INDEX_NONE && Neighbour->RegionID != NewRegion.ID)
+			{
+				bOnRegionBorder = true;
+				break;
+			}
+
+			// Check the diagonal neighbour
+			Neighbour = Neighbour->Neighbours[(Dir + 1) % 4];
+			if (Neighbour && Neighbour->RegionID != INDEX_NONE && Neighbour->RegionID != NewRegion.ID)
+			{
+				bOnRegionBorder = true;
+				break;
+			}
+		}
+
+		if (bOnRegionBorder)
+		{
+			NewRegion.Spans.Remove(Span);
+			Span->RegionID = INDEX_NONE;
+			continue;
+		}
+		++RegionSize;
+
+		// The new span is on the region. Checks if any of its neighbours should also be assigned to the new region
+		for (int32 Dir = 0; Dir < 4; ++Dir)
+		{
+			FNNOpenSpan* Neighbour = Span->Neighbours[Dir];
+
+			if (Neighbour && Neighbour->EdgeDistance >= FillToDistance && Neighbour->RegionID == INDEX_NONE)
+			{
+				Neighbour->RegionID = NewRegion.ID;
+				Neighbour->DistanceCoreDistance = 0;
+				NewRegion.Spans.Add(Neighbour);
+				WorkingStack.Add(Neighbour);
+			}
+		}
+	}
+
+	return RegionSize > 0;
+}
+
+void FNNRegionGenerator::ExpandRegions(TMap<int32, FNNRegion>& RegionsByID, TArray<FNNOpenSpan*>& Spans, int32 MaxIterations) const
+{
+	if (Spans.Num() == 0)
+	{
+		return;
+	}
+
+	int32 IterationCount = 0;
+	while (true)
+	{
+		int32 Skipped = 0;
+
+		for (int32 i = 0; i < Spans.Num(); ++i)
+		{
+			FNNOpenSpan* Span = Spans[i];
+			if (!Span)
+			{
+				++Skipped;
+				continue;
+			}
+
+			int32 SpanRegion = INDEX_NONE;
+			int32 RegionCenterDistance = INT32_MAX;
+			for (int32 Dir = 0; Dir < 4; ++Dir)
+			{
+				FNNOpenSpan* Neighbour = Span->Neighbours[Dir];
+				if (!Neighbour)
+				{
+					continue;
+				}
+				if (Neighbour->RegionID != INDEX_NONE)
+				{
+					if (Neighbour->DistanceCoreDistance + 2 < RegionCenterDistance)
+					{
+						int32 SameRegionCount = 0;
+						// Check if this neighbour has at least two other neighbours in its region
+						// To avoid a single width line of voxels
+						for (int32 NDir = 0; NDir < 4; ++NDir)
+						{
+							FNNOpenSpan* NNSpan = Neighbour->Neighbours[NDir];
+							if (!NNSpan)
+							{
+								return;
+							}
+
+							if (NNSpan->RegionID == Neighbour->RegionID)
+							{
+								++SameRegionCount;
+							}
+						}
+						if (SameRegionCount > 1)
+						{
+							// Choose this neighbour region
+							// Sets the distance to center a slightly further away than this neighbour
+							SpanRegion = Neighbour->RegionID;
+							RegionCenterDistance = Neighbour->DistanceCoreDistance + 2;
+						}
+					}
+				}
+			}
+			if (SpanRegion != INDEX_NONE)
+			{
+				RegionsByID[SpanRegion].Spans.Add(Span);
+				Span->RegionID = SpanRegion;
+				Span->DistanceCoreDistance = RegionCenterDistance;
+				Spans[i] = nullptr;
+			}
+			else
+			{
+				++Skipped;
+			}
+		}
+
+		// All spans have been processed
+		if (Skipped == Spans.Num())
+		{
+			break;
+		}
+
+		++IterationCount;
+		if (MaxIterations > 0 && IterationCount > MaxIterations)
+		{
+			// Reached the iteration limit
+			break;
 		}
 	}
 }

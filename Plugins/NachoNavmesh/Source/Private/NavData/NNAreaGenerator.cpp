@@ -93,7 +93,8 @@ void FNNAreaGenerator::DoWork()
 
 	// Generate Regions for the Open HeightField
 	constexpr FNNRegionGenerator RegionGenerator;
-	RegionGenerator.CreateRegions(*AreaGeneratorData->OpenHeightField, NavMesh->MinRegionSize);
+	const int32 MinTraversableSize = FMath::CeilToInt(NavMesh->AgentRadius / NavMesh->CellSize);
+	RegionGenerator.CreateRegions(*AreaGeneratorData->OpenHeightField, NavMesh->MinRegionSize, MinTraversableSize);
 
 	// Generate Contour
 	FNNContourGeneration ContourGeneration (*AreaGeneratorData, NavMesh->ContourDeviationThreshold, NavMesh->MaxEdgeLength);

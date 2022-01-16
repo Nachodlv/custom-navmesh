@@ -90,6 +90,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "NN|Config")
 	float AgentHeight;
 
+	/** Radius of the smallest agent that will path with this navmesh */
+	UPROPERTY(EditAnywhere, Category = "NN|Config")
+	float AgentRadius = 30.0f;
+
 	/** The X and Y size from the Spans in the HeightField */
 	UPROPERTY(EditAnywhere, Category = "NN|Config")
 	float CellSize = 20.0f;

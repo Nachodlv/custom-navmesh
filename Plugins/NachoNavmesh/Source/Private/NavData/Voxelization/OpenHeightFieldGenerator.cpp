@@ -5,6 +5,39 @@
 
 #define DEBUG_OPENHEIGHTFIELD 0
 
+namespace NNDistanceField
+{
+	// Represents a border span. It has less than 4 neighbours
+	constexpr int32 BorderSpan = 0;
+
+	// Represents an uninitialized non border span
+	constexpr int32 NeedsInitSpan = MAX_int32;
+
+	constexpr int32 DefaultDistance = 1;
+	constexpr int32 AxisNeighbourDistance = 2;
+	constexpr int32 DiagonalNeighbourDistance = 3;
+
+	int32 GetDistanceFromNeighbourFirstPass(const FNNOpenSpan& Neighbour, int32 CurrentDistance, bool bIsDiagonal)
+	{
+		int32 NeighbourDistance = Neighbour.EdgeDistance;
+		if (!bIsDiagonal)
+		{
+			NeighbourDistance =  NeighbourDistance == NeedsInitSpan ? DefaultDistance : NeighbourDistance + AxisNeighbourDistance;
+		}
+		else
+		{
+			NeighbourDistance = NeighbourDistance == NeedsInitSpan ? DefaultDistance + 1 : NeighbourDistance + DiagonalNeighbourDistance;
+		}
+		return FMath::Min(CurrentDistance, NeighbourDistance);
+	}
+
+	int32 GetDistanceFromNeighbourSecondPass(const FNNOpenSpan& Neighbour, int32 CurrentDistance, bool bIsDiagonal)
+	{
+		const int32 ExtraDistance = bIsDiagonal ? DiagonalNeighbourDistance : AxisNeighbourDistance;
+		const int32 NeighbourDistance = Neighbour.EdgeDistance + ExtraDistance;
+		return FMath::Min(CurrentDistance, NeighbourDistance);
+	}
+}
 
 TArray<FNNOpenSpan*> FNNOpenSpan::GetDetailedNeighbours() const
 {
@@ -45,6 +78,72 @@ FNNOpenHeightField::FNNOpenHeightField(int32 InUnitsWidth, int32 InUnitsDepth, i
 int32 FNNOpenHeightField::GetRegionIndexByID(int32 ID) const
 {
 	return Regions.IndexOfByPredicate([ID](const FNNRegion& Region) { return Region.ID == ID; });
+}
+
+int32 FNNOpenHeightField::GetSpanMaxEdgeDistance() const
+{
+	if (SpanMaxEdgeDistance == INDEX_NONE)
+	{
+		CalculateSpanEdgeDistances();
+	}
+	return SpanMaxEdgeDistance;
+}
+
+int32 FNNOpenHeightField::GetSpanMinEdgeDistance() const
+{
+	if (SpanMinEdgeDistance == INDEX_NONE)
+	{
+		CalculateSpanEdgeDistances();
+	}
+	return SpanMinEdgeDistance;
+}
+
+void FNNOpenHeightField::CalculateSpanEdgeDistances() const
+{
+	SpanMaxEdgeDistance = INDEX_NONE;
+	SpanMinEdgeDistance = MAX_int32;
+	for (const TUniquePtr<FNNOpenSpan>& Span : Spans)
+	{
+		for (FNNOpenSpan* CurrentSpan = Span.Get(); CurrentSpan; CurrentSpan = CurrentSpan->NextOpenSpan.Get())
+		{
+			if (SpanMaxEdgeDistance < CurrentSpan->EdgeDistance)
+			{
+				SpanMaxEdgeDistance = CurrentSpan->EdgeDistance;
+			}
+			if (SpanMinEdgeDistance > CurrentSpan->EdgeDistance)
+			{
+				SpanMinEdgeDistance = CurrentSpan->EdgeDistance;
+			}
+		}
+	}
+}
+
+FNNOpenHeightFieldIterator::FNNOpenHeightFieldIterator(const FNNOpenHeightField& InOpenHeightField)
+	: OpenHeightField(InOpenHeightField)
+{
+	CurrentSpan = GetNextValidOpenSpan();
+}
+
+void FNNOpenHeightFieldIterator::operator++()
+{
+	CurrentSpan = CurrentSpan->NextOpenSpan.Get();
+	if (!CurrentSpan)
+	{
+		CurrentSpan = GetNextValidOpenSpan();
+	}
+}
+
+FNNOpenSpan* FNNOpenHeightFieldIterator::GetNextValidOpenSpan()
+{
+	++CurrentIndex;
+	for (; CurrentIndex < OpenHeightField.Spans.Num(); ++CurrentIndex)
+	{
+		if (OpenHeightField.Spans[CurrentIndex].IsValid())
+		{
+			return OpenHeightField.Spans[CurrentIndex].Get();
+		}
+	}
+	return nullptr;
 }
 
 FNNRegion FNNRegion::GenerateNewRegion()
@@ -104,26 +203,21 @@ void FOpenHeightFieldGenerator::GenerateOpenHeightField(FNNOpenHeightField& OutO
 		}
 	}
 
-	int32 MaxEdgeDistance = INDEX_NONE;
-	// Calculate distance to nearest edge
+	GenerateDistanceField(OutOpenHeightField);
+
+#if DEBUG_OPENHEIGHTFIELD
 	for (int32 i = 0; i < OutOpenHeightField.Spans.Num(); ++i)
 	{
 		FNNOpenSpan* OpenSpan = OutOpenHeightField.Spans[i].Get();
 		while (OpenSpan)
 		{
-			TArray<const FNNOpenSpan*> VisitedSpans;
-			OpenSpan->EdgeDistance = GetOpenSpanEdgeDistance(OpenSpan);
-			MaxEdgeDistance = FMath::Max(OpenSpan->EdgeDistance, MaxEdgeDistance);
-
-#if DEBUG_OPENHEIGHTFIELD
 			// Debug distances
 			const FVector OpenSpanPosition = OpenSpan->GetOpenSpanWorldPosition(OutOpenHeightField);
 			AreaGeneratorData.AddDebugText(OpenSpanPosition, FString::FromInt(OpenSpan->EdgeDistance));
-#endif // DEBUG_OPENHEIGHTFIELD_DISTANCE
 			OpenSpan = OpenSpan->NextOpenSpan.Get();
 		}
 	}
-	OutOpenHeightField.SpanMaxEdgeDistance = MaxEdgeDistance;
+#endif // DEBUG_OPENHEIGHTFIELD_DISTANCE
 }
 
 void FOpenHeightFieldGenerator::SetOpenSpanNeighbours(FNNOpenHeightField& OutOpenHeightField, const TArray<FVector2D>& PossibleNeighbours, FNNOpenSpan* OpenSpan, float MaxLedgeHeight, float AgentHeight) const
@@ -182,48 +276,108 @@ void FOpenHeightFieldGenerator::SetOpenSpanNeighbours(FNNOpenHeightField& OutOpe
 	}
 }
 
-int32 FOpenHeightFieldGenerator::GetOpenSpanEdgeDistance(const FNNOpenSpan* OpenSpan) const
+void FOpenHeightFieldGenerator::GenerateDistanceField(FNNOpenHeightField& OpenHeightField) const
 {
-	TArray<const FNNOpenSpan*> VisitedSpans;
-	TArray<const FNNOpenSpan*> OpenSpans;
-	TMap<const FNNOpenSpan*, int32> Distances;
-	int32 NearestEdge = TNumericLimits<int32>::Max();
-	Distances.Add(OpenSpan, 0);
-	OpenSpans.Add(OpenSpan);
-	while (OpenSpans.Num() > 0)
+	if (OpenHeightField.Spans.Num() == 0)
 	{
-		const FNNOpenSpan* CurrentSpan = OpenSpans[0];
-		OpenSpans.RemoveAt(0);
-		VisitedSpans.Add(CurrentSpan);
-		const int32 CurrentDistance = Distances[CurrentSpan];
+		return;
+	}
 
-		// The result for this span has already been calculated
-		if (CurrentSpan->EdgeDistance != INDEX_NONE)
+	// Initialization
+	for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenHeightField.Spans)
+	{
+		for (FNNOpenSpan* CurrentSpan = OpenSpan.Get(); CurrentSpan; CurrentSpan = CurrentSpan->NextOpenSpan.Get())
 		{
-			NearestEdge = FMath::Min(CurrentDistance + CurrentSpan->EdgeDistance, NearestEdge);
-			continue;
-		}
-
-		const int32 NewDistance = CurrentDistance + 1;
-		const bool bSearchNeighbours = NewDistance < NearestEdge;
-		for (const FNNOpenSpan* Neighbour : CurrentSpan->Neighbours)
-		{
-			// It's an edge!
-			// TODO (ignacio) should i add the edge into the open spans?
-			if (!Neighbour)
+			bool bIsBorder = false;
+			for (int32 i = 0; i < 4; ++i)
 			{
-				NearestEdge = FMath::Min(NewDistance, NearestEdge);
+				const FNNOpenSpan* Neighbour = CurrentSpan->Neighbours[i];
+				// If the axis neighbour or the diagonal neighbour is null then this is a border span
+				if (!Neighbour || !Neighbour->Neighbours[(i + 1) % 4])
+				{
+					bIsBorder = true;
+					break;
+				}
 			}
-			else if (bSearchNeighbours && !VisitedSpans.Contains(Neighbour))
-			{
-				Distances.Add(Neighbour, NewDistance);
-				OpenSpans.Add(Neighbour);
-			}
+			CurrentSpan->EdgeDistance = bIsBorder ? NNDistanceField::BorderSpan : NNDistanceField::NeedsInitSpan;
 		}
 	}
 
-	return NearestEdge;
+	// Pass 1 the following neighbours will be checked: (-1, 0), (-1, -1), (0, -1), (1, -1)
+	for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenHeightField.Spans)
+	{
+		for (FNNOpenSpan* CurrentSpan = OpenSpan.Get(); CurrentSpan; CurrentSpan = CurrentSpan->NextOpenSpan.Get())
+		{
+			int32 SpanDistance = CurrentSpan->EdgeDistance;
+			if (SpanDistance == NNDistanceField::BorderSpan)
+			{
+				continue;
+			}
 
+			// (-1, 0)
+			FNNOpenSpan* Neighbour = CurrentSpan->Neighbours[0];
+			SpanDistance = NNDistanceField::GetDistanceFromNeighbourFirstPass(*Neighbour, SpanDistance, false);
+
+			// (-1, -1)
+			Neighbour = Neighbour->Neighbours[3];
+			if (Neighbour)
+			{
+				SpanDistance = NNDistanceField::GetDistanceFromNeighbourFirstPass(*Neighbour, SpanDistance, true);
+			}
+
+			// (0, -1)
+			Neighbour = CurrentSpan->Neighbours[3];
+			SpanDistance = NNDistanceField::GetDistanceFromNeighbourFirstPass(*Neighbour, SpanDistance, false);
+
+			// (1, -1)
+			Neighbour = Neighbour->Neighbours[2];
+			if (Neighbour)
+			{
+				SpanDistance = NNDistanceField::GetDistanceFromNeighbourFirstPass(*Neighbour, SpanDistance, true);
+			}
+
+			CurrentSpan->EdgeDistance = SpanDistance;
+		}
+	}
+
+	// Pass 2. Neighbours checked (1, 0), (1, 1), (0, 1), (-1, 1)
+	// Don't need to handle the NeedsInits special case
+	for (int32 i = OpenHeightField.Spans.Num() - 1; i >= 0; --i)
+	{
+		TUniquePtr<FNNOpenSpan>& OpenSpan = OpenHeightField.Spans[i];
+		for (FNNOpenSpan* CurrentSpan = OpenSpan.Get(); CurrentSpan; CurrentSpan = CurrentSpan->NextOpenSpan.Get())
+		{
+			int32 SpanDistance = CurrentSpan->EdgeDistance;
+			if (SpanDistance == NNDistanceField::BorderSpan)
+			{
+				continue;
+			}
+
+			// (1, 0)
+			FNNOpenSpan* Neighbour = CurrentSpan->Neighbours[2];
+			SpanDistance = NNDistanceField::GetDistanceFromNeighbourSecondPass(*Neighbour, SpanDistance, false);
+
+			// (1, 1)
+			Neighbour = Neighbour->Neighbours[1];
+			if (Neighbour)
+			{
+				SpanDistance = NNDistanceField::GetDistanceFromNeighbourSecondPass(*Neighbour, SpanDistance, true);
+			}
+
+			// (0, 1)
+			Neighbour = CurrentSpan->Neighbours[1];
+			SpanDistance = NNDistanceField::GetDistanceFromNeighbourSecondPass(*Neighbour, SpanDistance, false);
+
+			// (-1, 1)
+			Neighbour = Neighbour->Neighbours[0];
+			if (Neighbour)
+			{
+				SpanDistance = NNDistanceField::GetDistanceFromNeighbourSecondPass(*Neighbour, SpanDistance, true);
+			}
+
+			CurrentSpan->EdgeDistance = SpanDistance;
+		}
+	}
 }
 
 
