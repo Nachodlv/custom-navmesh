@@ -98,6 +98,14 @@ int32 FNNOpenHeightField::GetSpanMinEdgeDistance() const
 	return SpanMinEdgeDistance;
 }
 
+FVector FNNOpenHeightField::TransformVectorToWorldPosition(const FVector& Vector) const
+{
+	const float X = Vector.X * CellSize;
+	const float Y = Vector.Y * CellSize;
+	const float Z = Vector.Z * CellHeight;
+	return Bounds.Min + FVector(X, Y, Z);
+}
+
 void FNNOpenHeightField::CalculateSpanEdgeDistances() const
 {
 	SpanMaxEdgeDistance = INDEX_NONE;

@@ -4,6 +4,7 @@
 #include "Contour/NNContourGeneration.h"
 #include "ConvexPolygon/NNPolyMeshBuilder.h"
 #include "NNNavMeshRenderingComp.h"
+#include "Pathfinding/NNPathfinding.h"
 
 struct FNNHeightField;
 struct FNNOpenHeightField;
@@ -67,6 +68,8 @@ struct FNNAreaGeneratorData
 	TArray<FNNContour> Contours;
 
 	FNNPolygonMesh PolygonMesh;
+
+	FNNGraph PathfindingGraph;
 
 	/** BoxSpheres used for debugging */
 	TArray<FBoxSphereBounds> TemporaryBoxSpheres;

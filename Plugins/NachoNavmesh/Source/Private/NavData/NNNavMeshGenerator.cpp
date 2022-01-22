@@ -11,14 +11,6 @@
 
 namespace NNNavMeshGeneratorHelpers
 {
-	FVector TransformVectorToWorldPosition(const FVector& Vector, const FNNOpenHeightField& OpenHeightField)
-	{
-		const float X = Vector.X * OpenHeightField.CellSize;
-		const float Y = Vector.Y * OpenHeightField.CellSize;
-		const float Z = Vector.Z * OpenHeightField.CellHeight;
-		return OpenHeightField.Bounds.Min + FVector(X, Y, Z);
-	}
-
 	FNNNavMeshDebuggingInfo::PolygonDebugInfo BuildDebugInfoFromPolygon(
 		const FNNOpenHeightField& OpenHeightField, const FNNPolygonMesh& PolygonMesh, const FNNPolygon& Polygon)
 	{
@@ -31,7 +23,7 @@ namespace NNNavMeshGeneratorHelpers
 			if (Index >= 0)
 			{
 				const FVector& PolygonVector = PolygonMesh.Vertexes[Polygon.Indexes[i]];
-				Vertexes.Add(TransformVectorToWorldPosition(PolygonVector, OpenHeightField));
+				Vertexes.Add(OpenHeightField.TransformVectorToWorldPosition(PolygonVector));
 				Indexes.Add(i);
 			}
 		}
@@ -246,14 +238,14 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 			DebugSimplifiedVertexes.Reserve(Contour.SimplifiedVertexes.Num());
 			for (const FVector& Vertex : Contour.SimplifiedVertexes)
 			{
-				FVector WorldVertex = NNNavMeshGeneratorHelpers::TransformVectorToWorldPosition(Vertex, *OpenHeightField);
+				FVector WorldVertex = OpenHeightField->TransformVectorToWorldPosition(Vertex);
 				DebugSimplifiedVertexes.Add(MoveTemp(WorldVertex));
 			}
 			TArray<FVector> DebugRawVertexes;
 			DebugRawVertexes.Reserve(Contour.RawVertexes.Num());
 			for (const FVector& RawVertex : Contour.RawVertexes)
 			{
-				FVector WorldVertex = NNNavMeshGeneratorHelpers::TransformVectorToWorldPosition(RawVertex, *OpenHeightField);
+				FVector WorldVertex = OpenHeightField->TransformVectorToWorldPosition(RawVertex);
 				DebugRawVertexes.Add(MoveTemp(WorldVertex));
 			}
 

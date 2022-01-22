@@ -4,8 +4,9 @@
 #include "NavigationSystem.h"
 
 // NN Includes
-#include "NavData/NNNavMeshGenerator.h"
 #include "NavData/Contour/NNContourGeneration.h"
+#include "NavData/NNNavMeshGenerator.h"
+#include "NavData/Pathfinding/NNPathfinding.h"
 #include "NavData/Regions/NNRegionGenerator.h"
 #include "NavData/Voxelization/HeightFieldGenerator.h"
 #include "NavData/Voxelization/OpenHeightFieldGenerator.h"
@@ -103,6 +104,9 @@ void FNNAreaGenerator::DoWork()
 	// Triangulate Contour
 	FNNPolyMeshBuilder MeshBuilder;
 	MeshBuilder.GenerateConvexPolygon(AreaGeneratorData->Contours, AreaGeneratorData->PolygonMesh);
+
+	const FNNPathfinding Pathfinding (*AreaGeneratorData);
+	Pathfinding.CreateGraph(*AreaGeneratorData->OpenHeightField, AreaGeneratorData->PolygonMesh, AreaGeneratorData->PathfindingGraph);
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)
