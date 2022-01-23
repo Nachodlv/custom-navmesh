@@ -33,10 +33,11 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - [X] Merge triangles to form convex polygons
 - [ ] Detail Mesh Generation
 - [ ] Implement pathfinding
+- [ ] Bake results
 
 ## Improves
 - [X] Refactor the distance field generation
 - [ ] Replace unreal triangulation with custom one without using ear clipping
 - [ ] Profile
-- [ ] Make navmesh generation asynchronous
+- [X] Make navmesh generation asynchronous
 - [X] Rebuild only the dirty area and not all the navmesh

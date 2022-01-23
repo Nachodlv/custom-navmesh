@@ -1,6 +1,7 @@
 ﻿#include "NavData/NNNavMeshGenerator.h"
 
 // UE Includes
+#include "Async/AsyncWork.h"
 #include "Kismet/KismetMathLibrary.h"
 
 // NN Includes
@@ -37,6 +38,7 @@ FNNNavMeshGenerator::FNNNavMeshGenerator(ANNNavMesh& InNavMesh)
 
 void FNNNavMeshGenerator::TickAsyncBuild(float DeltaSeconds)
 {
+	CheckAsyncTasks();
 	ProcessDirtyAreas();
 }
 
@@ -45,10 +47,6 @@ bool FNNNavMeshGenerator::RebuildAll()
 	for (const FNavigationBounds& NavBound : NavBounds)
 	{
 		DirtyAreas.AddUnique(NavBound.UniqueID);
-	}
-	for (const auto& Data : GeneratorsData)
-	{
-		delete Data.Value;
 	}
 	GeneratorsData.Reset();
 	return true;
@@ -73,6 +71,41 @@ FNNAreaGenerator* FNNNavMeshGenerator::CreateAreaGenerator(const FNavigationBoun
 	return new FNNAreaGenerator(this, DirtyArea);
 }
 
+void FNNNavMeshGenerator::CheckAsyncTasks()
+{
+	TArray<uint32> BoundsID;
+	WorkingTasks.GetKeys(BoundsID);
+	bool bRefreshRenderer = false;
+	for (int32 i = BoundsID.Num() - 1; i >= 0; --i)
+	{
+		const uint32 BoundID = BoundsID[i];
+		FAsyncTask<FNNAreaGenerator>* Task = WorkingTasks[BoundID];
+		if (Task->IsDone())
+		{
+			bRefreshRenderer = true;
+			FNNAreaGenerator& AreaGenerator = Task->GetTask();
+			GeneratorsData.Add(BoundID, AreaGenerator.RetrieveGeneratorData());
+			WorkingTasks.Remove(BoundID);
+			delete Task;
+		}
+	}
+
+	if (bRefreshRenderer)
+	{
+		Cast<UNNNavMeshRenderingComp>(NavMesh->RenderingComp)->ForceUpdate();
+	}
+
+	for (int32 i = CanceledTasks.Num() - 1; i >= 0; --i)
+	{
+		FAsyncTask<FNNAreaGenerator>* Task = CanceledTasks[i];
+		if (Task->Cancel())
+		{
+			CanceledTasks.RemoveAt(i);
+			delete Task;
+		}
+	}
+}
+
 void FNNNavMeshGenerator::ProcessDirtyAreas()
 {
 	if (DirtyAreas.Num() == 0)
@@ -82,27 +115,44 @@ void FNNNavMeshGenerator::ProcessDirtyAreas()
 
 	for (int32 i = DirtyAreas.Num() - 1; i >= 0; --i)
 	{
+		const uint32 BoundsID = DirtyAreas[i];
 		FNavigationBounds DirtyAreaSearch;
-		DirtyAreaSearch.UniqueID = DirtyAreas[i];
+		DirtyAreaSearch.UniqueID = BoundsID;
 		const FNavigationBounds* DirtyArea = NavBounds.Find(DirtyAreaSearch);
+
+		// Deletes the data of this area previously calculated
+		if (FNNAreaGeneratorData** GeneratorData = GeneratorsData.Find(BoundsID))
+		{
+			delete (*GeneratorData);
+			GeneratorsData.Remove(BoundsID);
+		}
+
 		// The area might have been deleted
 		if (DirtyArea)
 		{
-			FNNAreaGenerator* AreaGenerator = CreateAreaGenerator(*DirtyArea);
-			AreaGenerator->DoWork();
-
-			// TODO (ignacio) is it necessary to delete the data if it's going to be overriden?
-			// Does the TMap does this for use?
-			if (FNNAreaGeneratorData** Data = GeneratorsData.Find(DirtyAreas[i]))
+			// Cancels any task that is currently calculating the same area
+			if (FAsyncTask<FNNAreaGenerator>** Task = WorkingTasks.Find(BoundsID))
 			{
-				delete *Data;
+				CanceledTasks.Add(*Task);
 			}
-			GeneratorsData.Add(DirtyAreas[i], AreaGenerator->GetAreaGeneratorData());
-			delete AreaGenerator;
+
+			// Starts calculating the navmesh for this area async
+			FAsyncTask<FNNAreaGenerator>* Task = new FAsyncTask<FNNAreaGenerator>(this, *DirtyArea);
+			Task->StartBackgroundTask();
+			WorkingTasks.Add(BoundsID, Task);
 		}
 	}
-	Cast<UNNNavMeshRenderingComp>(NavMesh->RenderingComp)->ForceUpdate();
 	DirtyAreas.Reset();
+}
+
+int32 FNNNavMeshGenerator::GetNumRunningBuildTasks() const
+{
+	return WorkingTasks.Num();
+}
+
+bool FNNNavMeshGenerator::IsBuildInProgressCheckDirty() const
+{
+	return DirtyAreas.Num() > 0 || GetNumRunningBuildTasks() > 0;
 }
 
 FBox FNNNavMeshGenerator::GrowBoundingBox(const FBox& BBox, bool bUseAgentHeight) const
@@ -126,7 +176,7 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		DebuggingInfo.TemporaryLines.Append(Result.Value->TemporaryLines);
 		DebuggingInfo.TemporaryArrows.Append(Result.Value->TemporaryArrows);
 
-		const TArray<TUniquePtr<Span>>& Spans = Result.Value->HeightField->Spans;
+		const TArray<TUniquePtr<Span>>& Spans = Result.Value->HeightField.Spans;
 
 		// TODO (ignacio) this can be moved to a function
 		FNavigationBounds DataSearch;
@@ -135,9 +185,9 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		const FVector BoundMinPoint = GeneratorArea->AreaBox.Min;
 
 		// Converts the HeightField Spans into FBoxes
-		const float CellSize = Result.Value->HeightField->CellSize;
-		const float CellHeight = Result.Value->HeightField->CellHeight;
-		const int32 UnitsWidth = Result.Value->HeightField->UnitsWidth;
+		const float CellSize = Result.Value->HeightField.CellSize;
+		const float CellHeight = Result.Value->HeightField.CellHeight;
+		const int32 UnitsWidth = Result.Value->HeightField.UnitsWidth;
 		for (int32 i = 0; i < Spans.Num(); ++i)
 		{
 			const float Y = (i / UnitsWidth) * CellSize;
@@ -161,10 +211,10 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		}
 
 		// Converts the OpenHeightField Spans into FBoxes
-		const FNNOpenHeightField* OpenHeightField = Result.Value->OpenHeightField.Get();
-		if (OpenHeightField->Spans.Num() > 0)
+		const FNNOpenHeightField& OpenHeightField = Result.Value->OpenHeightField;
+		if (OpenHeightField.Spans.Num() > 0)
 		{
-			const TArray<TUniquePtr<FNNOpenSpan>>& OpenSpans = OpenHeightField->Spans;
+			const TArray<TUniquePtr<FNNOpenSpan>>& OpenSpans = OpenHeightField.Spans;
 
 			int32 MaxDistance = INDEX_NONE;
 			int32 MinDistance = 1; // There is always a span with distance 0
@@ -185,7 +235,7 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 
 			FLinearColor MaxColor = FLinearColor::Red;
 			FLinearColor MinColor = FLinearColor::Green;
-			float MaxHeight = Result.Value->OpenHeightField->Bounds.Max.Z;
+			float MaxHeight = Result.Value->OpenHeightField.Bounds.Max.Z;
 			for (int32 i = 0; i < OpenSpans.Num(); ++i)
 			{
 				FNNOpenSpan* OpenSpan = OpenSpans[i].Get();
@@ -211,7 +261,7 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		}
 
 		// Grab the Regions debugging info
-		const TArray<FNNRegion>& Regions = OpenHeightField->Regions;
+		const TArray<FNNRegion>& Regions = OpenHeightField.Regions;
 		DebuggingInfo.Regions.Reserve(Regions.Num());
 		for (const FNNRegion& Region : Regions)
 		{
@@ -219,11 +269,11 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 			RegionSpans.Reserve(Region.Spans.Num());
 			for (const FNNOpenSpan* OpenSpan : Region.Spans)
 			{
-				const float X = OpenSpan->X * OpenHeightField->CellSize;
-				const float Y = OpenSpan->Y * OpenHeightField->CellSize;
-				const float Z = OpenSpan->MinHeight * OpenHeightField->CellHeight;
+				const float X = OpenSpan->X * OpenHeightField.CellSize;
+				const float Y = OpenSpan->Y * OpenHeightField.CellSize;
+				const float Z = OpenSpan->MinHeight * OpenHeightField.CellHeight;
 				FVector MinPoint = BoundMinPoint + FVector(X, Y, Z);
-				FVector MaxPoint = MinPoint + FVector(OpenHeightField->CellSize, OpenHeightField->CellSize, 0.0f);
+				FVector MaxPoint = MinPoint + FVector(OpenHeightField.CellSize, OpenHeightField.CellSize, 0.0f);
 				RegionSpans.Emplace(FBox(MinPoint, MaxPoint));
 			}
 			DebuggingInfo.Regions.Emplace(FNNNavMeshDebuggingInfo::RegionDebugInfo(RegionSpans));
@@ -238,14 +288,14 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 			DebugSimplifiedVertexes.Reserve(Contour.SimplifiedVertexes.Num());
 			for (const FVector& Vertex : Contour.SimplifiedVertexes)
 			{
-				FVector WorldVertex = OpenHeightField->TransformVectorToWorldPosition(Vertex);
+				FVector WorldVertex = OpenHeightField.TransformVectorToWorldPosition(Vertex);
 				DebugSimplifiedVertexes.Add(MoveTemp(WorldVertex));
 			}
 			TArray<FVector> DebugRawVertexes;
 			DebugRawVertexes.Reserve(Contour.RawVertexes.Num());
 			for (const FVector& RawVertex : Contour.RawVertexes)
 			{
-				FVector WorldVertex = OpenHeightField->TransformVectorToWorldPosition(RawVertex);
+				FVector WorldVertex = OpenHeightField.TransformVectorToWorldPosition(RawVertex);
 				DebugRawVertexes.Add(MoveTemp(WorldVertex));
 			}
 
@@ -254,15 +304,15 @@ void FNNNavMeshGenerator::GrabDebuggingInfo(FNNNavMeshDebuggingInfo& DebuggingIn
 		}
 
 		const FNNPolygonMesh& PolygonMesh = Result.Value->PolygonMesh;
-		DebuggingInfo.MeshTriangulated.Reset(PolygonMesh.PolygonIndexes.Num());
+		DebuggingInfo.MeshTriangulated.Reserve(PolygonMesh.PolygonIndexes.Num());
 		for (const FNNPolygon& Triangle : PolygonMesh.TriangleIndexes)
 		{
-			FNNNavMeshDebuggingInfo::PolygonDebugInfo DebugInfo = NNNavMeshGeneratorHelpers::BuildDebugInfoFromPolygon(*OpenHeightField, PolygonMesh, Triangle);
+			FNNNavMeshDebuggingInfo::PolygonDebugInfo DebugInfo = NNNavMeshGeneratorHelpers::BuildDebugInfoFromPolygon(OpenHeightField, PolygonMesh, Triangle);
 			DebuggingInfo.MeshTriangulated.Add(MoveTemp(DebugInfo));
 		}
 		for (const FNNPolygon& Polygon : PolygonMesh.PolygonIndexes)
 		{
-			FNNNavMeshDebuggingInfo::PolygonDebugInfo DebugInfo = NNNavMeshGeneratorHelpers::BuildDebugInfoFromPolygon(*OpenHeightField, PolygonMesh, Polygon);
+			FNNNavMeshDebuggingInfo::PolygonDebugInfo DebugInfo = NNNavMeshGeneratorHelpers::BuildDebugInfoFromPolygon(OpenHeightField, PolygonMesh, Polygon);
 			DebuggingInfo.PolygonMesh.Add(MoveTemp(DebugInfo));
 		}
 	}

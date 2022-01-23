@@ -23,17 +23,6 @@ FNNGeometryCache::FNNGeometryCache(const uint8* Memory)
 	Indices = (int32*)(Memory + sizeof(FNNGeometryCache) + (sizeof(float) * Header.NumVerts * 3));
 }
 
-FNNAreaGeneratorData::~FNNAreaGeneratorData()
-{
-	HeightField = nullptr;
-	OpenHeightField = nullptr;
-	TemporaryBoxSpheres.Reset();
-	RawGeometry.Reset();
-	TemporaryLines.Reset();
-	TemporaryArrows.Reset();
-	TemporaryTexts.Reset();
-}
-
 void FNNAreaGeneratorData::AddDebugPoint(const FVector& Point, float Radius)
 {
 	FBoxSphereBounds PointToDebug = FBoxSphereBounds(FSphere(Point, Radius));
@@ -55,7 +44,7 @@ void FNNAreaGeneratorData::AddDebugArrow(const FVector& Start, const FVector& En
 	TemporaryArrows.Emplace(Start, End, Color);
 }
 
-FNNAreaGenerator::FNNAreaGenerator(FNNNavMeshGenerator* InParentGenerator, const FNavigationBounds& Bounds)
+FNNAreaGenerator::FNNAreaGenerator(const FNNNavMeshGenerator* InParentGenerator, const FNavigationBounds& Bounds)
 	: AreaBounds(Bounds), ParentGenerator(InParentGenerator)
 {
 }
@@ -64,11 +53,7 @@ void FNNAreaGenerator::DoWork()
 {
 	check(ParentGenerator);
 
-	if (AreaGeneratorData)
-	{
-		delete AreaGeneratorData;
-	}
-	AreaGeneratorData = new FNNAreaGeneratorData();
+	AreaGeneratorData = MakeUnique<FNNAreaGeneratorData>();
 
 	GatherGeometry(true);
 
@@ -81,32 +66,30 @@ void FNNAreaGenerator::DoWork()
 
 	// Create Solid HeightField
 	const FHeightFieldGenerator HeightFieldGenerator (*AreaGeneratorData);
-	AreaGeneratorData->HeightField = MakeUnique<FNNHeightField>();
-	HeightFieldGenerator.InitializeHeightField(*AreaGeneratorData->HeightField ,
+	HeightFieldGenerator.InitializeHeightField(AreaGeneratorData->HeightField ,
 		AreaGeneratorData->RawGeometry, MinimumPoint, MaximumPoint, HeightFieldSize,
 		HeightFieldHeight, NavMesh->WalkableSlopeDegrees, NavMesh->AgentHeight, NavMesh->MaxLedgeHeight);
 
 
 	// Create Open HeightField
 	const FOpenHeightFieldGenerator OpenHeightFieldGenerator (*AreaGeneratorData);
-	AreaGeneratorData->OpenHeightField = MakeUnique<FNNOpenHeightField>();
-	OpenHeightFieldGenerator.GenerateOpenHeightField(*AreaGeneratorData->OpenHeightField, *AreaGeneratorData->HeightField, NavMesh->MaxLedgeHeight, NavMesh->AgentHeight);
+	OpenHeightFieldGenerator.GenerateOpenHeightField(AreaGeneratorData->OpenHeightField, AreaGeneratorData->HeightField, NavMesh->MaxLedgeHeight, NavMesh->AgentHeight);
 
 	// Generate Regions for the Open HeightField
 	constexpr FNNRegionGenerator RegionGenerator;
 	const int32 MinTraversableSize = FMath::CeilToInt(NavMesh->AgentRadius / NavMesh->CellSize);
-	RegionGenerator.CreateRegions(*AreaGeneratorData->OpenHeightField, NavMesh->MinRegionSize, MinTraversableSize);
+	RegionGenerator.CreateRegions(AreaGeneratorData->OpenHeightField, NavMesh->MinRegionSize, MinTraversableSize);
 
 	// Generate Contour
 	FNNContourGeneration ContourGeneration (*AreaGeneratorData, NavMesh->ContourDeviationThreshold, NavMesh->MaxEdgeLength);
-	ContourGeneration.CalculateContour(*AreaGeneratorData->OpenHeightField, AreaGeneratorData->Contours);
+	ContourGeneration.CalculateContour(AreaGeneratorData->OpenHeightField, AreaGeneratorData->Contours);
 
 	// Triangulate Contour
 	FNNPolyMeshBuilder MeshBuilder;
 	MeshBuilder.GenerateConvexPolygon(AreaGeneratorData->Contours, AreaGeneratorData->PolygonMesh);
 
 	const FNNPathfinding Pathfinding (*AreaGeneratorData);
-	Pathfinding.CreateGraph(*AreaGeneratorData->OpenHeightField, AreaGeneratorData->PolygonMesh, AreaGeneratorData->PathfindingGraph);
+	Pathfinding.CreateGraph(AreaGeneratorData->OpenHeightField, AreaGeneratorData->PolygonMesh, AreaGeneratorData->PathfindingGraph);
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)

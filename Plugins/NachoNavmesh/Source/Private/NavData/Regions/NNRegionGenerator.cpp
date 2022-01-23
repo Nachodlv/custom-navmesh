@@ -157,7 +157,7 @@ bool FNNRegionGenerator::FloodNewRegion(FNNOpenSpan* RootSpan, int32 FillToDista
 	WorkingStack.Add(RootSpan);
 	NewRegion.Spans.Add(RootSpan);
 	RootSpan->RegionID = NewRegion.ID;
-	RootSpan->DistanceCoreDistance = 0;
+	RootSpan->DistanceToCore = 0;
 
 	int32 RegionSize = 0;
 	while (WorkingStack.Num() > 0)
@@ -204,7 +204,7 @@ bool FNNRegionGenerator::FloodNewRegion(FNNOpenSpan* RootSpan, int32 FillToDista
 			if (Neighbour && Neighbour->EdgeDistance >= FillToDistance && Neighbour->RegionID == INDEX_NONE)
 			{
 				Neighbour->RegionID = NewRegion.ID;
-				Neighbour->DistanceCoreDistance = 0;
+				Neighbour->DistanceToCore = 0;
 				NewRegion.Spans.Add(Neighbour);
 				WorkingStack.Add(Neighbour);
 			}
@@ -246,7 +246,7 @@ void FNNRegionGenerator::ExpandRegions(TMap<int32, FNNRegion>& RegionsByID, TArr
 				}
 				if (Neighbour->RegionID != INDEX_NONE)
 				{
-					if (Neighbour->DistanceCoreDistance + 2 < RegionCenterDistance)
+					if (Neighbour->DistanceToCore + 2 < RegionCenterDistance)
 					{
 						int32 SameRegionCount = 0;
 						// Check if this neighbour has at least two other neighbours in its region
@@ -269,7 +269,7 @@ void FNNRegionGenerator::ExpandRegions(TMap<int32, FNNRegion>& RegionsByID, TArr
 							// Choose this neighbour region
 							// Sets the distance to center a slightly further away than this neighbour
 							SpanRegion = Neighbour->RegionID;
-							RegionCenterDistance = Neighbour->DistanceCoreDistance + 2;
+							RegionCenterDistance = Neighbour->DistanceToCore + 2;
 						}
 					}
 				}
@@ -278,7 +278,7 @@ void FNNRegionGenerator::ExpandRegions(TMap<int32, FNNRegion>& RegionsByID, TArr
 			{
 				RegionsByID[SpanRegion].Spans.Add(Span);
 				Span->RegionID = SpanRegion;
-				Span->DistanceCoreDistance = RegionCenterDistance;
+				Span->DistanceToCore = RegionCenterDistance;
 				Spans[i] = nullptr;
 			}
 			else

@@ -1,8 +1,5 @@
 ﻿#pragma once
 
-// NN Includes
-#include "NavData/NNAreaGenerator.h"
-
 struct FNNAreaGeneratorData;
 struct FNNRawGeometryElement;
 

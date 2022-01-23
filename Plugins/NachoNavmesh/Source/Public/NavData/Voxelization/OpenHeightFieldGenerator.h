@@ -22,7 +22,6 @@ struct FNNOpenSpan
 	{
 		Neighbours.Init(nullptr, 4);
 	}
-	FNNOpenSpan(const FNNOpenSpan& InSpan) = delete;
 
 	int32 MinHeight = INDEX_NONE;
 	int32 MaxHeight = INDEX_NONE;
@@ -36,7 +35,7 @@ struct FNNOpenSpan
 	/** The distance of this span to an edge */
 	int32 EdgeDistance = INDEX_NONE;
 	/** Distance to the region center it belongs to */
-	int32 DistanceCoreDistance = INDEX_NONE;
+	int32 DistanceToCore = INDEX_NONE;
 	/** The region identifier this span belongs to */
 	int32 RegionID = INDEX_NONE;
 	int32 Flags = ENNOpenSpanFlags::None;
@@ -64,6 +63,7 @@ struct FNNOpenHeightField
 
 	FNNOpenHeightField() {}
 	FNNOpenHeightField(int32 InUnitsWidth, int32 InUnitsDepth, int32 InUnitsHeight);
+
 	int32 UnitsWidth = INDEX_NONE;
 	int32 UnitsDepth = INDEX_NONE;
 	int32 UnitsHeight = INDEX_NONE;

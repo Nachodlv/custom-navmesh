@@ -4,10 +4,9 @@
 #include "Contour/NNContourGeneration.h"
 #include "ConvexPolygon/NNPolyMeshBuilder.h"
 #include "NNNavMeshRenderingComp.h"
+#include "NavData/Voxelization/HeightFieldGenerator.h"
 #include "Pathfinding/NNPathfinding.h"
-
-struct FNNHeightField;
-struct FNNOpenHeightField;
+#include "Voxelization/OpenHeightFieldGenerator.h"
 
 class UNavigationSystemV1;
 class FNNNavMeshGenerator;
@@ -57,13 +56,12 @@ struct FNNGeometryCache
 /** The result of the FNNAreaGenerator */
 struct FNNAreaGeneratorData
 {
-	~FNNAreaGeneratorData();
 	// tile's geometry: without voxel cache
 	TArray<FNNRawGeometryElement> RawGeometry;
 
-	TUniquePtr<FNNHeightField> HeightField = nullptr;
+	FNNHeightField HeightField;
 
-	TUniquePtr<FNNOpenHeightField> OpenHeightField = nullptr;
+	FNNOpenHeightField OpenHeightField;
 
 	TArray<FNNContour> Contours;
 
@@ -92,16 +90,30 @@ struct FNNAreaGeneratorData
 };
 
 /** Calculates the nav mesh for a specific FNavigationBounds */
-class NACHONAVMESH_API FNNAreaGenerator : public FNoncopyable
+class NACHONAVMESH_API FNNAreaGenerator : public FNonAbandonableTask
 {
 public:
-	FNNAreaGenerator(FNNNavMeshGenerator* InParentGenerator, const FNavigationBounds& Bounds);
+	FNNAreaGenerator(const FNNNavMeshGenerator* InParentGenerator, const FNavigationBounds& Bounds);
 
 	/** Gathers the geometry inside the AreaBounds */
 	void DoWork();
 
-	/** Returns the result of this FNNAreaGenerator */
-	FNNAreaGeneratorData* GetAreaGeneratorData() const { return AreaGeneratorData; }
+	/** Declaration necessary for FNonAbandonableTask */
+	FORCEINLINE TStatId GetStatId() const
+	{
+		RETURN_QUICK_DECLARE_CYCLE_STAT(FNNAreaGeneratorData, STATGROUP_ThreadPoolAsyncTasks);
+	}
+
+	friend bool operator==(const FNNAreaGenerator& Lhs, const FNNAreaGenerator& Rhs)
+	{
+		return Lhs.AreaBounds == Rhs.AreaBounds;
+	}
+
+	/** Returns the bounds assigned to this generator */
+	const FNavigationBounds& GetAreaBounds() const { return AreaBounds; }
+
+	/** Returns the resulting data */
+	FNNAreaGeneratorData* RetrieveGeneratorData() { return AreaGeneratorData.Release(); }
 
 protected:
 	/** Gathers the geometry inside the AreaBounds */
@@ -117,8 +129,8 @@ private:
 
 	// TODO (ignacio) no idea how safe is to have a raw pointer here
 	/** The generator owner */
-	FNNNavMeshGenerator* ParentGenerator;
+	const FNNNavMeshGenerator* ParentGenerator;
 
 	/** The resulting data */
-	FNNAreaGeneratorData* AreaGeneratorData = nullptr;
+	TUniquePtr<FNNAreaGeneratorData> AreaGeneratorData;
 };
