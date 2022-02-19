@@ -6,12 +6,29 @@
 
 #include "AI/NavDataGenerator.h"
 
+/** Contains an async task that is currently running or needs to be run */
+struct FNNWorkingAsyncTask
+{
+	FNNWorkingAsyncTask(FAsyncTask<FNNAreaGenerator>* Task, float StartTime)
+		: Task(Task), StartTime(StartTime) {}
+
+	/** The task that needs to run or is currently running */
+	FAsyncTask<FNNAreaGenerator>* Task = nullptr;
+	/** The time the task should start running */
+	float StartTime = 0.0f;
+	/** Whether that Task is currently running */
+	bool bStarted = false;
+};
+
 class NACHONAVMESH_API FNNNavMeshGenerator : public FNavDataGenerator
 {
 	friend ANNNavMesh;
 
 public:
 	FNNNavMeshGenerator(ANNNavMesh& InNavMesh);
+
+	/** Stops the currently running tasks */
+	virtual ~FNNNavMeshGenerator() override;
 
 	// ~ Begin FNavDataGenerator
 
@@ -47,6 +64,8 @@ public:
 	/** Returns whether we are still calculating dirty areas */
 	virtual bool IsBuildInProgressCheckDirty() const override;
 
+	virtual void CancelBuild() override;
+
 protected:
 	/** Creates a FNNAreaGenerator for every dirty area and makes them calculates it */
 	void ProcessDirtyAreas();
@@ -71,7 +90,7 @@ private:
 	TMap<uint32, FNNAreaGeneratorData*> GeneratorsData;
 
 	/** The tasks that are currently calculating the area bounds given by its key */
-	TMap<uint32, FAsyncTask<FNNAreaGenerator>*> WorkingTasks;
+	TMap<uint32, FNNWorkingAsyncTask> WorkingTasks;
 
 	/** The tasks that need to be canceled and deleted */
 	TArray<FAsyncTask<FNNAreaGenerator>*> CanceledTasks;
@@ -79,4 +98,7 @@ private:
 	/** Used to grow generic element bounds to match this generator's properties
 	 *	(most notably Config.borderSize) */
 	FVector BBoxGrowth;
+
+	/** The time that a task needs to wait before starting */
+	float WaitTimeToStartWorkingTask = 2.0f;
 };

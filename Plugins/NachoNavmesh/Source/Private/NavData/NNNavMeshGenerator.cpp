@@ -36,6 +36,26 @@ FNNNavMeshGenerator::FNNNavMeshGenerator(ANNNavMesh& InNavMesh)
 	: NavMesh(&InNavMesh), NavBounds(InNavMesh.GetRegisteredBounds())
 {}
 
+FNNNavMeshGenerator::~FNNNavMeshGenerator()
+{
+	for (const auto& WorkingTask : WorkingTasks)
+	{
+		if (WorkingTask.Value.bStarted && !WorkingTask.Value.Task->Cancel())
+		{
+			WorkingTask.Value.Task->EnsureCompletion();
+		}
+	}
+	for (FAsyncTask<FNNAreaGenerator>* CanceledTask : CanceledTasks)
+	{
+		if (!CanceledTask->Cancel() || !CanceledTask->IsDone())
+		{
+			CanceledTask->EnsureCompletion();
+		}
+	}
+	WorkingTasks.Reset();
+	CanceledTasks.Reset();
+}
+
 void FNNNavMeshGenerator::TickAsyncBuild(float DeltaSeconds)
 {
 	CheckAsyncTasks();
@@ -73,20 +93,29 @@ FNNAreaGenerator* FNNNavMeshGenerator::CreateAreaGenerator(const FNavigationBoun
 
 void FNNNavMeshGenerator::CheckAsyncTasks()
 {
+	const float TimeSeconds = NavMesh->GetWorld()->GetTimeSeconds();
+
 	TArray<uint32> BoundsID;
 	WorkingTasks.GetKeys(BoundsID);
 	bool bRefreshRenderer = false;
 	for (int32 i = BoundsID.Num() - 1; i >= 0; --i)
 	{
 		const uint32 BoundID = BoundsID[i];
-		FAsyncTask<FNNAreaGenerator>* Task = WorkingTasks[BoundID];
-		if (Task->IsDone())
+		FNNWorkingAsyncTask& WorkingTask = WorkingTasks[BoundID];
+		if (!WorkingTask.bStarted)
+		{
+			if (WorkingTask.StartTime < TimeSeconds)
+			{
+				WorkingTask.Task->StartBackgroundTask();
+				WorkingTask.bStarted = true;
+			}
+		}
+		else if (WorkingTask.Task->IsDone())
 		{
 			bRefreshRenderer = true;
-			FNNAreaGenerator& AreaGenerator = Task->GetTask();
+			FNNAreaGenerator& AreaGenerator = WorkingTask.Task->GetTask();
 			GeneratorsData.Add(BoundID, AreaGenerator.RetrieveGeneratorData());
 			WorkingTasks.Remove(BoundID);
-			delete Task;
 		}
 	}
 
@@ -97,11 +126,10 @@ void FNNNavMeshGenerator::CheckAsyncTasks()
 
 	for (int32 i = CanceledTasks.Num() - 1; i >= 0; --i)
 	{
-		FAsyncTask<FNNAreaGenerator>* Task = CanceledTasks[i];
-		if (Task->Cancel())
+		FAsyncTask<FNNAreaGenerator>* TaskCanceled = CanceledTasks[i];
+		if (TaskCanceled->Cancel() || TaskCanceled->IsDone())
 		{
 			CanceledTasks.RemoveAt(i);
-			delete Task;
 		}
 	}
 }
@@ -113,6 +141,8 @@ void FNNNavMeshGenerator::ProcessDirtyAreas()
 		return;
 	}
 
+	const float TimeSeconds = NavMesh->GetWorld()->GetTimeSeconds();
+	const float StartWorkingTasks = TimeSeconds + WaitTimeToStartWorkingTask;
 	for (int32 i = DirtyAreas.Num() - 1; i >= 0; --i)
 	{
 		const uint32 BoundsID = DirtyAreas[i];
@@ -131,15 +161,18 @@ void FNNNavMeshGenerator::ProcessDirtyAreas()
 		if (DirtyArea)
 		{
 			// Cancels any task that is currently calculating the same area
-			if (FAsyncTask<FNNAreaGenerator>** Task = WorkingTasks.Find(BoundsID))
+			if (const FNNWorkingAsyncTask* WorkingAsyncTask = WorkingTasks.Find(BoundsID))
 			{
-				CanceledTasks.Add(*Task);
+				if (WorkingAsyncTask->bStarted)
+				{
+					CanceledTasks.Add(WorkingAsyncTask->Task);
+				}
 			}
 
 			// Starts calculating the navmesh for this area async
 			FAsyncTask<FNNAreaGenerator>* Task = new FAsyncTask<FNNAreaGenerator>(this, *DirtyArea);
-			Task->StartBackgroundTask();
-			WorkingTasks.Add(BoundsID, Task);
+			FNNWorkingAsyncTask WorkingTask = FNNWorkingAsyncTask(Task, StartWorkingTasks);
+			WorkingTasks.Emplace(BoundsID, MoveTemp(WorkingTask));
 		}
 	}
 	DirtyAreas.Reset();
@@ -147,12 +180,32 @@ void FNNNavMeshGenerator::ProcessDirtyAreas()
 
 int32 FNNNavMeshGenerator::GetNumRunningBuildTasks() const
 {
-	return WorkingTasks.Num();
+	int32 RunningTasks = 0;
+	for (const auto& WorkingTask : WorkingTasks)
+	{
+		if (WorkingTask.Value.bStarted)
+		{
+			++RunningTasks;
+		}
+	}
+	return RunningTasks;
 }
 
 bool FNNNavMeshGenerator::IsBuildInProgressCheckDirty() const
 {
 	return DirtyAreas.Num() > 0 || GetNumRunningBuildTasks() > 0;
+}
+
+void FNNNavMeshGenerator::CancelBuild()
+{
+	for (auto& WorkingTask : WorkingTasks)
+	{
+		if (WorkingTask.Value.bStarted)
+		{
+			CanceledTasks.Add(WorkingTask.Value.Task);
+		}
+	}
+	WorkingTasks.Empty();
 }
 
 FBox FNNNavMeshGenerator::GrowBoundingBox(const FBox& BBox, bool bUseAgentHeight) const

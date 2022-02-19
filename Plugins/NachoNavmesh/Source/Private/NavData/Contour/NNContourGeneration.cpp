@@ -8,35 +8,33 @@
 
 void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField, TArray<FNNContour>& OutContours)
 {
-	for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenHeightField.Spans)
+	for (FNNOpenHeightFieldIterator It (OpenHeightField); It; ++It)
 	{
-		for (FNNOpenSpan* CurrentSpan = OpenSpan.Get(); CurrentSpan; CurrentSpan = CurrentSpan->NextOpenSpan.Get())
+		FNNOpenSpan* CurrentSpan = It.Get();
+		CurrentSpan->NeighbourFlags = 0;
+		if (CurrentSpan->RegionID == INDEX_NONE)
+		{
+			continue;
+		}
+		for (int32 Dir = 0; Dir < 4; ++Dir)
+		{
+			const FNNOpenSpan* Neighbour = CurrentSpan->Neighbours[Dir];
+			if (Neighbour && CurrentSpan->RegionID == Neighbour->RegionID)
+			{
+				// Set the neighbour bit to 1
+				CurrentSpan->NeighbourFlags |= (1 << Dir);
+			}
+		}
+		// Invert flags
+		CurrentSpan->NeighbourFlags ^= 0xf;
+		// Check if it's an island span. All neighbours are in other regions
+		if (CurrentSpan->NeighbourFlags == 0xf)
 		{
 			CurrentSpan->NeighbourFlags = 0;
-			if (CurrentSpan->RegionID == INDEX_NONE)
-			{
-				continue;
-			}
-			for (int32 Dir = 0; Dir < 4; ++Dir)
-			{
-				FNNOpenSpan* Neighbour = CurrentSpan->Neighbours[Dir];
-				if (Neighbour && CurrentSpan->RegionID == Neighbour->RegionID)
-				{
-					// Set the neighbour bit to 1
-					CurrentSpan->NeighbourFlags |= (1 << Dir);
-				}
-			}
-			// Invert flags
-			CurrentSpan->NeighbourFlags ^= 0xf;
-			// Check if it's an island span. All neighbours are in other regions
-			if (CurrentSpan->NeighbourFlags == 0xf)
-			{
-				CurrentSpan->NeighbourFlags = 0;
-			}
-#if DEBUG_CONTOUR_GENERATION
-			AreaGeneratorData.AddDebugText(CurrentSpan->GetOpenSpanWorldPosition(OpenHeightField), FString::FromInt(CurrentSpan->NeighbourFlags));
-#endif
 		}
+#if DEBUG_CONTOUR_GENERATION
+		AreaGeneratorData.AddDebugText(CurrentSpan->GetOpenSpanWorldPosition(OpenHeightField), FString::FromInt(CurrentSpan->NeighbourFlags));
+#endif
 	}
 
 	TArray<FVector> Vertices;
@@ -44,38 +42,51 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField,
 	TArray<FVector> SimplifiedVertices;
 	TArray<int32> SimplifiedVerticesIndexes;
 	TArray<int32> SimplifiedRegions;
-	for (TUniquePtr<FNNOpenSpan>& OpenSpan : OpenHeightField.Spans)
+
+	for (FNNOpenHeightFieldIterator It (OpenHeightField); It; ++It)
 	{
-		for (FNNOpenSpan* CurrentSpan = OpenSpan.Get(); CurrentSpan; CurrentSpan = CurrentSpan->NextOpenSpan.Get())
+		FNNOpenSpan* CurrentSpan = It.Get();
+		// Span already processed
+		if (!CurrentSpan || CurrentSpan->RegionID == INDEX_NONE || CurrentSpan->NeighbourFlags == 0)
 		{
-			// Span already processed
-			if (!CurrentSpan || CurrentSpan->RegionID == INDEX_NONE || CurrentSpan->NeighbourFlags == 0)
+			continue;
+		}
+
+		// Locate the direction which points to another region
+		int32 StartDirection = 0;
+		while ((CurrentSpan->NeighbourFlags & (1 << StartDirection)) == 0)
+		{
+			++StartDirection;
+		}
+
+		BuildRawContour(CurrentSpan, StartDirection, Vertices, VerticesRegions);
+		GenerateSimplifiedContour(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
+		MatchNullRegionEdges(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
+		NullRegionMaxEdge(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
+
+		if (SimplifiedVertices.Num() > 2)
+		{
+			OutContours.Emplace(CurrentSpan->RegionID, Vertices, SimplifiedVertices);
+		}
+
+		Vertices.Reset();
+		VerticesRegions.Reset();
+		SimplifiedVertices.Reset();
+		SimplifiedVerticesIndexes.Reset();
+		SimplifiedRegions.Reset();
+	}
+	
+	for (const FNNRegion& Region : OpenHeightField.Regions)
+	{
+		const int32 RegionID = Region.ID;
+		int32 RegionMatches = 0;
+		for (const FNNContour& Contour : OutContours)
+		{
+			if (Contour.RegionID == RegionID)
 			{
-				continue;
+				++RegionMatches;
+				ensureMsgf (RegionMatches <= 1, TEXT("More that one contour with the same region ID"));
 			}
-
-			// Locate the direction which points to another region
-			int32 StartDirection = 0;
-			while ((CurrentSpan->NeighbourFlags & (1 << StartDirection)) == 0)
-			{
-				++StartDirection;
-			}
-
-			BuildRawContour(CurrentSpan, StartDirection, Vertices, VerticesRegions);
-			GenerateSimplifiedContour(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
-			MatchNullRegionEdges(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
-			NullRegionMaxEdge(Vertices, VerticesRegions, SimplifiedVertices, SimplifiedVerticesIndexes);
-
-			if (SimplifiedVertices.Num() > 2)
-			{
-				OutContours.Emplace(CurrentSpan->RegionID, Vertices, SimplifiedVertices);
-			}
-
-			Vertices.Reset();
-			VerticesRegions.Reset();
-			SimplifiedVertices.Reset();
-			SimplifiedVerticesIndexes.Reset();
-			SimplifiedRegions.Reset();
 		}
 	}
 }

@@ -31,4 +31,7 @@ protected:
 	 * Returns whether the merge is possible */
 	static bool GetPolyMergeInfo(const FNNPolygon& PolyA, const FNNPolygon& PolyB, const FNNPolygonMesh& PolygonMesh,
 	                             int32& VertexToMergeA, int32& VertexToMergeB, float& DistanceSqrOfEdge);
+
+	/** Attempts to triangulate a polygon */
+	int32 Triangulate(const TArray<FVector>& ContourVertexes, TArray<int32>& VertexesIndexes, FNNPolygonMesh& PolygonMesh);
 };

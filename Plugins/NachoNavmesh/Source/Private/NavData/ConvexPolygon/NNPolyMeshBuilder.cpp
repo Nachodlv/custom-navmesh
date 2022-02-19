@@ -32,6 +32,12 @@ namespace
 	}
 }
 
+int32 FNNPolyMeshBuilder::Triangulate(const TArray<FVector>& ContourVertexes, TArray<int32>& VertexesIndexes,
+                                      FNNPolygonMesh& PolygonMesh)
+{
+	return 0;
+}
+
 void FNNPolyMeshBuilder::GenerateConvexPolygon(const TArray<FNNContour>& Contours, FNNPolygonMesh& PolygonMesh)
 {
 	if (Contours.Num() == 0)
@@ -58,9 +64,18 @@ void FNNPolyMeshBuilder::GenerateConvexPolygon(const TArray<FNNContour>& Contour
 	TArray<int32> ContourToPolyMeshIndices;
 	ContourToPolyMeshIndices.Reserve(MaxVertexesPerContour);
 
+
 	for (const FNNContour& Contour : Contours)
 	{
 		check(Contour.SimplifiedVertexes.Num() > 2);
+
+		TArray<int32> WorkingIndices;
+		for (int32 i = 0; i < Contour.SimplifiedVertexes.Num(); ++i)
+		{
+			WorkingIndices.Add(i);
+		}
+
+		// Triangulate(Contour.SimplifiedVertexes, WorkingIndices, PolygonMesh);
 
 		TArray<FVector2<float>> Vectors;
 		Vectors.Reserve(Contour.SimplifiedVertexes.Num());
@@ -87,69 +102,70 @@ void FNNPolyMeshBuilder::GenerateConvexPolygon(const TArray<FNNContour>& Contour
 			Polygon.Indexes.Add(CIndex);
 			PolygonMesh.TriangleIndexes.Add(Polygon);
 		}
-	}
 
-	// Merge the triangles until no polygon can be found to merge
-	if (MaxVertexesPerContour > 3)
-	{
-		while (true)
+		// Merge the triangles until no polygon can be found to merge
+		if (MaxVertexesPerContour > 3)
 		{
-			float LongestMergeEdge = 0.0f;
-			int32 BestPolyA = INDEX_NONE;
-			int32 PolyAVertex = INDEX_NONE;
-			int32 BestPolyB = INDEX_NONE;
-			int32 PolyBVertex = INDEX_NONE;
-			const int32 PolygonCount = PolygonMesh.PolygonIndexes.Num();
-			for (int32 PolyAIndex = 0; PolyAIndex < PolygonCount; ++PolyAIndex)
+			while (true)
 			{
-				const FNNPolygon& PolyA = PolygonMesh.PolygonIndexes[PolyAIndex];
-				for (int32 PolyBIndex = PolyAIndex + 1; PolyBIndex < PolygonCount; ++PolyBIndex)
+				float LongestMergeEdge = 0.0f;
+				int32 BestPolyA = INDEX_NONE;
+				int32 PolyAVertex = INDEX_NONE;
+				int32 BestPolyB = INDEX_NONE;
+				int32 PolyBVertex = INDEX_NONE;
+				const int32 PolygonCount = PolygonMesh.PolygonIndexes.Num();
+				for (int32 PolyAIndex = 0; PolyAIndex < PolygonCount; ++PolyAIndex)
 				{
-					const FNNPolygon& PolyB = PolygonMesh.PolygonIndexes[PolyBIndex];
-					int32 MergeVertexA;
-					int32 MergeVertexB;
-					float MergeVertexDistance;
-					const bool bResult = GetPolyMergeInfo(PolyA, PolyB, PolygonMesh, MergeVertexA, MergeVertexB,
-					                                      MergeVertexDistance);
-					if (bResult && MergeVertexDistance > LongestMergeEdge)
+					const FNNPolygon& PolyA = PolygonMesh.PolygonIndexes[PolyAIndex];
+					for (int32 PolyBIndex = PolyAIndex + 1; PolyBIndex < PolygonCount; ++PolyBIndex)
 					{
-						LongestMergeEdge = MergeVertexDistance;
-						BestPolyA = PolyAIndex;
-						PolyAVertex = MergeVertexA;
-						BestPolyB = PolyBIndex;
-						PolyBVertex = MergeVertexB;
+						const FNNPolygon& PolyB = PolygonMesh.PolygonIndexes[PolyBIndex];
+						int32 MergeVertexA;
+						int32 MergeVertexB;
+						float MergeVertexDistance;
+						const bool bResult = GetPolyMergeInfo(PolyA, PolyB, PolygonMesh, MergeVertexA, MergeVertexB,
+						                                      MergeVertexDistance);
+						if (bResult && MergeVertexDistance > LongestMergeEdge)
+						{
+							LongestMergeEdge = MergeVertexDistance;
+							BestPolyA = PolyAIndex;
+							PolyAVertex = MergeVertexA;
+							BestPolyB = PolyBIndex;
+							PolyBVertex = MergeVertexB;
+						}
+
 					}
-
 				}
-			}
 
-			if (LongestMergeEdge <= 0.0f)
-			{
-				// No valid valid merges were found
-				break;
-			}
+				if (LongestMergeEdge <= 0.0f)
+				{
+					// No valid valid merges were found
+					break;
+				}
 
-			// Perform the merge
+				// Perform the merge
 
-			FNNPolygon& PolyA = PolygonMesh.PolygonIndexes[BestPolyA];
-			FNNPolygon& PolyB = PolygonMesh.PolygonIndexes[BestPolyB];
+				FNNPolygon& PolyA = PolygonMesh.PolygonIndexes[BestPolyA];
+				FNNPolygon& PolyB = PolygonMesh.PolygonIndexes[BestPolyB];
 
-			// Copy the vertexes from PolyB to PolyA
-			// PolyAStartVert == PolyBEndVert && PolyAEndVert == PolyBStartVert
-			TArray<int32> MergedPoly;
-			MergedPoly.Reserve(PolyA.Indexes.Num() + PolyB.Indexes.Num() - 2);
-			for (int32 i = 0; i < PolyA.Indexes.Num() - 1; ++i)
-			{
-				MergedPoly.Add(PolyA.Indexes[(PolyAVertex + 1 + i) % PolyA.Indexes.Num()]);
+				// Copy the vertexes from PolyB to PolyA
+				// PolyAStartVert == PolyBEndVert && PolyAEndVert == PolyBStartVert
+				TArray<int32> MergedPoly;
+				MergedPoly.Reserve(PolyA.Indexes.Num() + PolyB.Indexes.Num() - 2);
+				for (int32 i = 0; i < PolyA.Indexes.Num() - 1; ++i)
+				{
+					MergedPoly.Add(PolyA.Indexes[(PolyAVertex + 1 + i) % PolyA.Indexes.Num()]);
+				}
+				for (int32 i = 0; i < PolyB.Indexes.Num() - 1; ++i)
+				{
+					MergedPoly.Add(PolyB.Indexes[(PolyBVertex + 1 + i) % PolyB.Indexes.Num()]);
+				}
+				PolyA.Indexes = MoveTemp(MergedPoly);
+				PolygonMesh.PolygonIndexes.RemoveAtSwap(BestPolyB);
 			}
-			for (int32 i = 0; i < PolyB.Indexes.Num() - 1; ++i)
-			{
-				MergedPoly.Add(PolyB.Indexes[(PolyBVertex + 1 + i) % PolyB.Indexes.Num()]);
-			}
-			PolyA.Indexes = MoveTemp(MergedPoly);
-			PolygonMesh.PolygonIndexes.RemoveAtSwap(BestPolyB);
 		}
 	}
+
 }
 
 bool FNNPolyMeshBuilder::GetPolyMergeInfo(const FNNPolygon& PolyA, const FNNPolygon& PolyB,
