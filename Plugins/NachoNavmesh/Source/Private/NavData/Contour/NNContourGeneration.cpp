@@ -41,7 +41,6 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField,
 	TArray<int32> VerticesRegions;
 	TArray<FVector> SimplifiedVertices;
 	TArray<int32> SimplifiedVerticesIndexes;
-	TArray<int32> SimplifiedRegions;
 
 	for (FNNOpenHeightFieldIterator It (OpenHeightField); It; ++It)
 	{
@@ -73,7 +72,6 @@ void FNNContourGeneration::CalculateContour(FNNOpenHeightField& OpenHeightField,
 		VerticesRegions.Reset();
 		SimplifiedVertices.Reset();
 		SimplifiedVerticesIndexes.Reset();
-		SimplifiedRegions.Reset();
 	}
 	
 	for (const FNNRegion& Region : OpenHeightField.Regions)
@@ -121,7 +119,7 @@ void FNNContourGeneration::BuildRawContour(FNNOpenSpan* StartSpan, int32 StartDi
 			default: break;
 			}
 
-			FNNOpenSpan* Neighbour = CurrentSpan->Neighbours[Dir];
+			const FNNOpenSpan* Neighbour = CurrentSpan->Neighbours[Dir];
 			int32 RegionNeighbour = Neighbour ? Neighbour->RegionID : INDEX_NONE;
 			OutContourVerts.Emplace(EdgeX, EdgeY, EdgeZ);
 			OutVertsRegions.Add(RegionNeighbour);
@@ -203,6 +201,9 @@ void FNNContourGeneration::GenerateSimplifiedContour(const TArray<FVector>& Sour
 			}
 		}
 	}
+
+	RemoveVerticalSegments(OutSimplifiedVertexes, OutSimplifiedVertexesIndexes);
+	RemoveIntersectionSegments(OutSimplifiedVertexes, OutSimplifiedVertexesIndexes, SourceRegions);
 }
 
 int32 FNNContourGeneration::GetCornerHeight(FNNOpenSpan& Span, int32 Direction) const
@@ -342,6 +343,87 @@ void FNNContourGeneration::NullRegionMaxEdge(const TArray<FVector>& SourceVertex
 			++VertexAIndex;
 		}
 	}
+}
+
+void FNNContourGeneration::RemoveVerticalSegments(TArray<FVector>& Vertexes, TArray<int32>& Indexes) const
+{
+	for (int32 i = 0; i < Vertexes.Num();)
+	{
+		const int32 NextVertexIndex = (i + 1) % Vertexes.Num();
+		const FVector& NextVertex = Vertexes[NextVertexIndex];
+		const FVector& Vertex = Vertexes[i];
+		if (Vertex.X == NextVertex.X && Vertex.Y == NextVertex.Y)
+		{
+			Vertexes.RemoveAt(NextVertexIndex);
+			Indexes.RemoveAt(NextVertexIndex);
+		}
+		else
+		{
+			++i;
+		}
+	}	
+}
+
+void FNNContourGeneration::RemoveIntersectionSegments(TArray<FVector>& Vertexes, TArray<int32>& SimplifiedIndexes, const TArray<int32>& SourceRegions) const
+{
+	for (int32 i = 0; i < Vertexes.Num(); ++i)
+	{
+		const int32 NextVertexIndex = (i + 1) % Vertexes.Num();
+		if (SourceRegions[SimplifiedIndexes[NextVertexIndex]] != INDEX_NONE)
+		{
+			i += RemoveIntersectionSegments(i, NextVertexIndex, Vertexes, SimplifiedIndexes, SourceRegions);
+		}
+	}
+}
+
+int32 FNNContourGeneration::RemoveIntersectionSegments(int32 StartVertexIndex, int32 EndVertexIndex,
+                                                       TArray<FVector>& Vertexes, TArray<int32>& SimplifiedIndexes, const TArray<int32>& SourceRegions) const
+{
+	if (Vertexes.Num() < 4)
+	{
+		return 0;
+	}
+
+	int32 Offset = 0;
+	int32 VertexIndex = (EndVertexIndex + 2) % Vertexes.Num();
+	int32 VertexIndexMinus = (EndVertexIndex + 1) % Vertexes.Num();
+	while (VertexIndex != StartVertexIndex)
+	{
+		const FVector& StartVertex = Vertexes[StartVertexIndex];
+		const FVector& EndVertex = Vertexes[EndVertexIndex];
+		FVector IntersectionPoint;
+		const int32 VertexRegion = SourceRegions[SimplifiedIndexes[VertexIndex]];
+		const int32 NextVertexRegion = SourceRegions[SimplifiedIndexes[(VertexIndex + 1) % Vertexes.Num()]];
+		// Only remove the vertex if both edges it belongs connect to the null region
+		// And it belongs to a segment that intersect the segment being tested against
+		if (VertexRegion == INDEX_NONE
+			&& NextVertexRegion == INDEX_NONE
+			&& FMath::SegmentIntersection2D(StartVertex, EndVertex, Vertexes[VertexIndexMinus], Vertexes[VertexIndex], IntersectionPoint))
+		{
+			// Remove the null region segment
+			Vertexes.RemoveAt(VertexIndex);
+			SimplifiedIndexes.RemoveAt(VertexIndex);
+			if (VertexIndex < StartVertexIndex || VertexIndex < EndVertexIndex)
+			{
+				--StartVertexIndex;
+				--EndVertexIndex;
+				--Offset;
+			}
+			if (VertexIndex < VertexIndexMinus)
+			{
+				--VertexIndexMinus;
+			}
+			VertexIndex = VertexIndex % Vertexes.Num();
+		}
+		else
+		{
+			// Move to the next segment
+			VertexIndexMinus = VertexIndex;
+			VertexIndex = (VertexIndex + 1) % Vertexes.Num();
+		}
+	}
+
+	return Offset;
 }
 
 

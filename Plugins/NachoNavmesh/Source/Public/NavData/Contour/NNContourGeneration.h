@@ -54,6 +54,17 @@ protected:
 	/** Add vertexes to a contour sucha that no null region edge segment exceeds the allowed edge length */
 	void NullRegionMaxEdge(const TArray<FVector>& SourceVertexes, const TArray<int32>& SourceRegions, TArray<FVector>& SimplifiedVertexes, TArray<int32>& SimplifiedVertexesIndexes) const;
 
+	/** Merges segments with the same X and Y coordinates */
+	void RemoveVerticalSegments(TArray<FVector>& Vertexes, TArray<int32>& Indexes) const;
+
+	/** Removes segments that intersects with region portal segments */
+	void RemoveIntersectionSegments(TArray<FVector>& Vertexes, TArray<int32>& SimplifiedIndexes, const TArray<int32>& SourceRegions) const;
+	
+	/** Remove any null region that intersects with the specified edge.
+	 * Returns the offset that the start vertex needs to move. The value will always be <= 0 */
+	int32 RemoveIntersectionSegments(int32 StartVertexIndex, int32 EndVertexIndex, TArray<FVector>& Vertexes,
+	                                 TArray<int32>& SimplifiedIndexes, const TArray<int32>& SourceRegions) const;
+
 private:
 	FNNAreaGeneratorData& AreaGeneratorData;
 

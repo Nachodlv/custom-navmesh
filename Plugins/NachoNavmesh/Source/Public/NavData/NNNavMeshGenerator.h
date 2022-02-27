@@ -97,8 +97,8 @@ private:
 
 	/** Used to grow generic element bounds to match this generator's properties
 	 *	(most notably Config.borderSize) */
-	FVector BBoxGrowth;
+	FVector BBoxGrowth = FVector::ZeroVector;
 
 	/** The time that a task needs to wait before starting */
-	float WaitTimeToStartWorkingTask = 2.0f;
+	float WaitTimeToStartWorkingTask = 1.0f;
 };

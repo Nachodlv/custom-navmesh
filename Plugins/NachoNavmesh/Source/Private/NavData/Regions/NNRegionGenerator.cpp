@@ -12,7 +12,7 @@ void FNNRegionGenerator::CreateRegions(FNNOpenHeightField& OpenHeightField, floa
 	// The current distance from the border that are we currently searching
 	// The distance starts at the maximum distance and moves towards 0
 	// It should always be divisible by 2
-	int32 Dist = (OpenHeightField.GetSpanMaxEdgeDistance() - 1) & ~1;
+	int32 Dist = (OpenHeightField.GetSpanMaxEdgeDistance()) & ~1;
 
 	// These spans are flooded and ready to be processed
 	TArray<FNNOpenSpan*> FloodedSpans;
@@ -52,7 +52,7 @@ void FNNRegionGenerator::CreateRegions(FNNOpenHeightField& OpenHeightField, floa
 			}
 
 			// Fill slightly more than the current "water level". This should improve the efficiency of the algorithm
-			const int32 FillTo = FMath::Min(Dist - 2, MinDist);
+			const int32 FillTo = FMath::Max(Dist - 2, MinDist);
 			if (FloodNewRegion(FloodedSpan, FillTo, WorkingStack, NewRegion))
 			{
 				RegionsByID.Add(NewRegion.ID, MoveTemp(NewRegion));
@@ -113,7 +113,7 @@ void FNNRegionGenerator::FilterSmallRegions(TArray<FNNRegion>& Regions, int32 Mi
 		{
 			for (FNNOpenSpan* Neighbour : Span->Neighbours)
 			{
-				if (Neighbour && Neighbour->RegionID != CurrentRegion.ID)
+				if (Neighbour && Neighbour->RegionID != INDEX_NONE && Neighbour->RegionID != CurrentRegion.ID)
 				{
 					const int32 RegionIndex = *RegionIndexByRegionID.Find(Neighbour->RegionID);
 					FNNRegion& NeighbourRegion = Regions[RegionIndex];
@@ -256,7 +256,7 @@ void FNNRegionGenerator::ExpandRegions(TMap<int32, FNNRegion>& RegionsByID, TArr
 							FNNOpenSpan* NNSpan = Neighbour->Neighbours[NDir];
 							if (!NNSpan)
 							{
-								return;
+								continue;
 							}
 
 							if (NNSpan->RegionID == Neighbour->RegionID)

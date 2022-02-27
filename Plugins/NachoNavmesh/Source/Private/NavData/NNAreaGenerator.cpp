@@ -57,6 +57,11 @@ void FNNAreaGenerator::DoWork()
 
 	GatherGeometry(true);
 
+	if (!ensure(AreaGeneratorData->RawGeometry.Num() > 0))
+	{
+		return;
+	}
+
 	const TWeakObjectPtr<ANNNavMesh> NavMesh = ParentGenerator->GetOwner();
 	const float HeightFieldHeight = NavMesh->CellHeight; // Z Axis
 	const float HeightFieldSize = NavMesh->CellSize; // X and Y Axis
