@@ -7,6 +7,7 @@
 #include "NNNavMesh.generated.h"
 
 struct FNNNavMeshDebuggingInfo;
+struct FNNPolygon;
 
 class FNNNavMeshGenerator;
 
@@ -20,7 +21,14 @@ friend FNNNavMeshGenerator;
 public:
 	ANNNavMesh();
 
+	/** Searches for a path for the given query */
 	static FPathFindingResult FindPath(const FNavAgentProperties& AgentProperties, const FPathFindingQuery& Query);
+
+	/** Searches for the nearest point in the navmesh inside the given Extent */
+	virtual bool ProjectPoint(const FVector& Point, FNavLocation& OutLocation, const FVector& Extent, FSharedConstNavQueryFilter Filter, const UObject* Querier) const override;
+
+	/** Retrieves the polygon containing the NavLocation. Returns whether it was found */
+	bool GetPolygonFromNavLocation(const FNavLocation& NavLocation, FNNPolygon& OutPolygon) const;
 
 	/**
 	 * Constructs and sets the generator which generates the navmesh. This function is called at the start of the game

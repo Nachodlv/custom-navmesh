@@ -93,8 +93,16 @@ void FNNAreaGenerator::DoWork()
 	FNNPolyMeshBuilder MeshBuilder;
 	MeshBuilder.GenerateConvexPolygon(AreaGeneratorData->Contours, AreaGeneratorData->PolygonMesh);
 
-	const FNNPathfinding Pathfinding (*AreaGeneratorData);
-	Pathfinding.CreateGraph(AreaGeneratorData->OpenHeightField, AreaGeneratorData->PolygonMesh, AreaGeneratorData->PathfindingGraph);
+	// Pathfinding graph
+	const FNNPathfinding Pathfinding (*AreaGeneratorData, AreaGeneratorData->OpenHeightField);
+	Pathfinding.CreateGraph(AreaGeneratorData->PolygonMesh, AreaGeneratorData->PathfindingGraph);
+
+	// Gives each polygon an unique ID
+	for (int32 i = 0; i < AreaGeneratorData->PolygonMesh.PolygonIndexes.Num(); ++i)
+	{
+		FNNPolygon& Polygon = AreaGeneratorData->PolygonMesh.PolygonIndexes[i];
+		Polygon.NodeRef = ParentGenerator->GeneratePolygonNodeRef(AreaBounds.UniqueID, i);
+	}
 }
 
 void FNNAreaGenerator::GatherGeometry(bool bGeometryChanged)

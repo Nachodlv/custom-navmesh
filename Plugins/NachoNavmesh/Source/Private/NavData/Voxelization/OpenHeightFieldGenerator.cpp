@@ -106,6 +106,15 @@ FVector FNNOpenHeightField::TransformVectorToWorldPosition(const FVector& Vector
 	return Bounds.Min + FVector(X, Y, Z);
 }
 
+FVector FNNOpenHeightField::TransformToHeightFieldPosition(const FVector& Vector) const
+{
+	FVector Result = Vector - Bounds.Min;
+	Result.X /= CellSize;
+	Result.Y /= CellSize;
+	Result.Z /= CellHeight;
+	return Result;
+}
+
 void FNNOpenHeightField::CalculateSpanEdgeDistances() const
 {
 	SpanMaxEdgeDistance = INDEX_NONE;

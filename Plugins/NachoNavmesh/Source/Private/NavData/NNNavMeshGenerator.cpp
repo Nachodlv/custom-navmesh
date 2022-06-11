@@ -1,7 +1,10 @@
 ﻿#include "NavData/NNNavMeshGenerator.h"
 
 // UE Includes
+#include "Algo/Transform.h"
 #include "Async/AsyncWork.h"
+#include "Collision.h"
+#include "CompGeom/PolygonTriangulation.h"
 #include "Kismet/KismetMathLibrary.h"
 
 // NN Includes
@@ -12,6 +15,9 @@
 
 namespace NNNavMeshGeneratorHelpers
 {
+	/** Quantity of bits used for the polygon index when generating the NavNodeRef */
+	constexpr uint8 PolygonIndexNodeRefBits = 12;
+	
 	FNNNavMeshDebuggingInfo::PolygonDebugInfo BuildDebugInfoFromPolygon(
 		const FNNOpenHeightField& OpenHeightField, const FNNPolygonMesh& PolygonMesh, const FNNPolygon& Polygon)
 	{
@@ -29,6 +35,20 @@ namespace NNNavMeshGeneratorHelpers
 			}
 		}
 		return FNNNavMeshDebuggingInfo::PolygonDebugInfo(Vertexes, Indexes);
+	}
+
+	void GetPolygonVertexes(const FNNPolygon& Polygon, const FNNAreaGeneratorData& GeneratorData, TArray<FVector>& OutPolygonVertexes)
+	{
+		OutPolygonVertexes.Reserve(Polygon.Indexes.Num());
+		for (const int32 Index : Polygon.Indexes)
+		{
+			if (Index == INDEX_NONE)
+			{
+				break;
+			}
+			const FVector& Vertex = GeneratorData.PolygonMesh.Vertexes[Index];
+			OutPolygonVertexes.Add(GeneratorData.OpenHeightField.TransformVectorToWorldPosition(Vertex));
+		}
 	}
 }
 
@@ -206,6 +226,122 @@ void FNNNavMeshGenerator::CancelBuild()
 		}
 	}
 	WorkingTasks.Empty();
+}
+
+bool FNNNavMeshGenerator::GetNavBoundIDForLocation(const FVector& Start, int32& OutBoundID) const
+{
+	for (const FNavigationBounds& NavBound : NavBounds)
+	{
+		if (NavBound.AreaBox.IsInside(Start))
+		{
+			OutBoundID = NavBound.UniqueID;
+			return true;
+		}
+	}
+	return false;
+}
+
+NavNodeRef FNNNavMeshGenerator::GeneratePolygonNodeRef(int32 NavBoundID, int32 PolygonIndex)
+{
+	uint64 NodeRef = NavBoundID << NNNavMeshGeneratorHelpers::PolygonIndexNodeRefBits;
+	NodeRef += PolygonIndex;
+	return NodeRef;
+}
+
+FPathFindingResult FNNNavMeshGenerator::FindPath(const FNavAgentProperties& AgentProperties,
+                                                 const FPathFindingQuery& Query) const
+{
+	int32 BoundID;
+	const bool bRetrieved = GetNavBoundIDForLocation(Query.StartLocation, BoundID);
+	if (!ensureMsgf(bRetrieved, TEXT("No navmesh found in the start location")))
+	{
+		return FPathFindingResult(ENavigationQueryResult::Invalid);
+	}
+
+	FNNAreaGeneratorData* const* GeneratorData = GeneratorsData.Find(BoundID);
+	if (!ensureMsgf(GeneratorData, TEXT("The navmesh was no yet baked in the start location")))
+	{
+		return FPathFindingResult(ENavigationQueryResult::Error);
+	}
+
+	const FNNPathfinding Pathfinding(**GeneratorData, (*GeneratorData)->OpenHeightField);
+	const FNavPathSharedPtr NavigationPath = Pathfinding.FindPath((*GeneratorData)->PathfindingGraph,
+	                                                              (*GeneratorData)->PolygonMesh, AgentProperties, Query);
+	if (!NavigationPath)
+	{
+		return FPathFindingResult(ENavigationQueryResult::Invalid);
+	}
+	FPathFindingResult Result (ENavigationQueryResult::Success);
+	Result.Path = NavigationPath;
+	return Result;
+}
+
+bool FNNNavMeshGenerator::ProjectPoint(const FVector& Point, FNavLocation& OutLocation, const FVector& Extent,
+	FSharedConstNavQueryFilter Filter, const UObject* Querier) const
+{
+	const FBox BoundBox (Point - Extent, Point + Extent);
+	const FNavigationBounds* BestBound = nullptr;
+	int32 BestPolygonIndex = INDEX_NONE;
+	float BestDistanceToPoint = BIG_NUMBER;
+	TArray<FVector> BestPolygonVertexes;
+
+	// Searches for the nearest polygon inside the Extent
+	for (const FNavigationBounds& Bound : NavBounds)
+	{
+		if (Bound.AreaBox.Intersect(BoundBox))
+		{
+			if (FNNAreaGeneratorData* const* GeneratorDataPtr = GeneratorsData.Find(Bound.UniqueID))
+			{
+				FNNAreaGeneratorData* GeneratorData = *GeneratorDataPtr;
+				for (int32 j = 0; j < GeneratorData->PolygonMesh.PolygonIndexes.Num(); ++j)
+				{
+					const FNNPolygon& Polygon = GeneratorData->PolygonMesh.PolygonIndexes[j];
+					TArray<FVector> PolygonVertexes;
+					NNNavMeshGeneratorHelpers::GetPolygonVertexes(Polygon, *GeneratorData, PolygonVertexes);
+					const FSeparatingAxisPointCheck PointCheck (PolygonVertexes, Point, Extent, true);
+					if (PointCheck.bHit && PointCheck.BestDist < BestDistanceToPoint)
+					{
+						BestDistanceToPoint = PointCheck.BestDist;
+						BestBound = &Bound;
+						BestPolygonIndex = j;
+						BestPolygonVertexes = MoveTemp(PolygonVertexes);
+					}
+					PolygonVertexes.Reset();
+				}
+			}
+		}
+	}
+	if (!BestBound)
+	{
+		return false;
+	}
+
+	// Retrieves the nearest point between the Point and the nearest polygon
+	TArray<FVector3<float>> PolygonVertexes;
+	FVector3<float> PlaneLocation;
+	FVector3<float> PlaneNormal;
+	Algo::Transform(BestPolygonVertexes, PolygonVertexes, [](const FVector& Vertex) { return Vertex; });
+	PolygonTriangulation::ComputePolygonPlane(PolygonVertexes, PlaneNormal, PlaneLocation);
+	const FPlane Plane (static_cast<FVector>(PlaneLocation), static_cast<FVector>(PlaneNormal));
+	OutLocation = FNavLocation(FVector::PointPlaneProject(Point, Plane));
+	OutLocation.NodeRef = GeneratePolygonNodeRef(BestBound->UniqueID, BestPolygonIndex);
+	return true;
+}
+
+bool FNNNavMeshGenerator::GetPolygonFromNavLocation(const FNavLocation& NavLocation, FNNPolygon& OutPolygon) const
+{
+	const int32 BoundId = NavLocation.NodeRef >> NNNavMeshGeneratorHelpers::PolygonIndexNodeRefBits;
+	const int32 PolygonIndex = NavLocation.NodeRef & ((1 << NNNavMeshGeneratorHelpers::PolygonIndexNodeRefBits) - 1);
+	if (FNNAreaGeneratorData* const* GeneratorDataPtr = GeneratorsData.Find(BoundId))
+	{
+		FNNAreaGeneratorData* GeneratorData = *GeneratorDataPtr;
+		if (GeneratorData->PolygonMesh.PolygonIndexes.IsValidIndex(PolygonIndex))
+		{
+			OutPolygon = GeneratorData->PolygonMesh.PolygonIndexes[PolygonIndex];
+			return true;
+		}
+	}
+	return false;
 }
 
 FBox FNNNavMeshGenerator::GrowBoundingBox(const FBox& BBox, bool bUseAgentHeight) const

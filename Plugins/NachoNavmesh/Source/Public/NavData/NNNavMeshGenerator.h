@@ -23,6 +23,7 @@ struct FNNWorkingAsyncTask
 class NACHONAVMESH_API FNNNavMeshGenerator : public FNavDataGenerator
 {
 	friend ANNNavMesh;
+	friend class FNNAreaGenerator;
 
 public:
 	FNNNavMeshGenerator(ANNNavMesh& InNavMesh);
@@ -45,6 +46,15 @@ public:
 	virtual int32 GetNumRemaningBuildTasks() const override { return WorkingTasks.Num(); }
 
 	// ~ End FNavDataGenerator
+
+	/** Searches for a path with the parameters provided by the Query */
+	FPathFindingResult FindPath(const FNavAgentProperties& AgentProperties, const FPathFindingQuery& Query) const;
+
+	/** Searches for the nearest point in the navmesh inside the given Extent */
+	bool ProjectPoint(const FVector& Point, FNavLocation& OutLocation, const FVector& Extent, FSharedConstNavQueryFilter Filter, const UObject* Querier) const;
+
+	/** Retrieves the polygon containing the NavLocation. Returns whether it was found */
+	bool GetPolygonFromNavLocation(const FNavLocation& NavLocation, FNNPolygon& OutPolygon) const;
 
 	/** Returns a FBox with the sum of BBox, BBoxGrowth and the AgentHeight */
 	FBox GrowBoundingBox(const FBox& BBox, bool bUseAgentHeight) const;
@@ -75,6 +85,12 @@ protected:
 
 	/** Retrieves the results from the async tasks and tries to delete the ones canceled */
 	void CheckAsyncTasks();
+
+	/** Retrieves the bound ID which contains the Start vector. Returns whether the nav bound was found. */
+	bool GetNavBoundIDForLocation(const FVector& Start, int32& OutBoundID) const;
+
+	/** Returns an unique ID for the given NavBound and PolygonIndex */
+	static NavNodeRef GeneratePolygonNodeRef(int32 NavBoundID, int32 PolygonIndex);
 
 private:
 	/** The NavMesh owner of this generator */

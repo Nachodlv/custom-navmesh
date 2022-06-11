@@ -9,6 +9,8 @@ struct FNNPolygon
 	FNNPolygon(int32 IndexesNum = 0) { Indexes.Reserve(IndexesNum); }
 	TArray<int32> Indexes;
 	int32 RegionID = INDEX_NONE;
+	NavNodeRef NodeRef = INVALID_NAVNODEREF;
+	friend bool operator==(const FNNPolygon& Lhs, const FNNPolygon& Rhs) { return Lhs.NodeRef == Rhs.NodeRef; }
 };
 
 struct FNNPolygonMesh

@@ -35,6 +35,17 @@ namespace
 int32 FNNPolyMeshBuilder::Triangulate(const TArray<FVector>& ContourVertexes, TArray<int32>& VertexesIndexes,
                                       FNNPolygonMesh& PolygonMesh)
 {
+	// Loop through all vertices flagging all indices that represent a center vertex of a valid new triangle
+	for (int i = 0; i < VertexesIndexes.Num(); ++i)
+	{
+		const int32 iPlus1 = GetNextIndex(i, VertexesIndexes.Num());
+		const int32 iPlus2 = GetNextIndex(iPlus1, VertexesIndexes.Num());
+		if (IsValidPartition(i, iPlus2, ContourVertexes, VertexesIndexes))
+		{
+			// TODO
+		}
+	}
+	
 	return 0;
 }
 
@@ -246,6 +257,29 @@ bool FNNPolyMeshBuilder::GetPolyMergeInfo(const FNNPolygon& PolyA, const FNNPoly
 	const float DeltaY = PreviousVertex.Y - SharedVertex.Y;
 	DistanceSqrOfEdge = DeltaX * DeltaX + DeltaY * DeltaY;
 	return true;
+}
+
+bool FNNPolyMeshBuilder::IsValidPartition(int32 IndexA, int32 IndexB, const TArray<FVector>& Vertexes,
+	const TArray<int32>& VertexesIndexes) const
+{
+	return LiesWithinInternalAngle(IndexA, IndexB, Vertexes, VertexesIndexes);
+		// TODO && !HasIllegalEdgeIntersection(IndexA, IndexB, Vertexes, VertexesIndexes);
+}
+
+bool FNNPolyMeshBuilder::LiesWithinInternalAngle(int32 IndexA, int32 IndexB, const TArray<FVector>& Vertexes,
+	const TArray<int32>& VertexesIndexes) const
+{
+	constexpr int32 DeFlag = NNPolyMeshBuilderVariables::TriangulationDeFlag;
+	int32 PointerVertexA = VertexesIndexes[IndexA] & DeFlag;
+	int32 PointerVertexB = VertexesIndexes[IndexB] & DeFlag;
+	int32 PointerVertexAMinus = VertexesIndexes[GetPreviousIndex(IndexA, VertexesIndexes.Num())] & DeFlag;
+	int32 PointerVertexAPlus = VertexesIndexes[GetNextIndex(IndexA, VertexesIndexes.Num())] & DeFlag;
+
+	// First we need to check which of the two angles formed by the line segment AMinus->A->APlus is internal (points
+	// towards) the polygon.
+
+	return false;
+	
 }
 
 

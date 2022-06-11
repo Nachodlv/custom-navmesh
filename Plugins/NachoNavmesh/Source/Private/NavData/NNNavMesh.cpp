@@ -1,6 +1,7 @@
 ﻿#include "NavData/NNNavMesh.h"
 
 // UE Includes
+#include "AbstractNavData.h"
 #include "NavigationSystem.h"
 
 // NN Includes
@@ -10,12 +11,28 @@
 ANNNavMesh::ANNNavMesh()
 {
 	FindPathImplementation = FindPath;
+	DefaultQueryFilter->SetFilterImplementation(new FAbstractQueryFilter());
 }
 
 FPathFindingResult ANNNavMesh::FindPath(const FNavAgentProperties& AgentProperties, const FPathFindingQuery& Query)
 {
-	UE_LOG(LogTemp, Warning, TEXT("%s: looking for a path!"), ANSI_TO_TCHAR(__FUNCTION__));
-	return FPathFindingResult();
+	const ANNNavMesh* Self = Cast<ANNNavMesh>(Query.NavData.Get());
+	const FNNNavMeshGenerator* Generator = static_cast<FNNNavMeshGenerator*>(Self->NavDataGenerator.Get());
+	FPathFindingResult Result = Generator->FindPath(AgentProperties, Query);
+	return Result;
+}
+
+bool ANNNavMesh::ProjectPoint(const FVector& Point, FNavLocation& OutLocation, const FVector& Extent,
+	FSharedConstNavQueryFilter Filter, const UObject* Querier) const
+{
+	const FNNNavMeshGenerator* Generator = static_cast<FNNNavMeshGenerator*>(NavDataGenerator.Get());
+	return Generator->ProjectPoint(Point, OutLocation, Extent, Filter, Querier);
+}
+
+bool ANNNavMesh::GetPolygonFromNavLocation(const FNavLocation& NavLocation, FNNPolygon& OutPolygon) const
+{
+	const FNNNavMeshGenerator* Generator = static_cast<FNNNavMeshGenerator*>(NavDataGenerator.Get());
+	return Generator->GetPolygonFromNavLocation(NavLocation, OutPolygon);
 }
 
 void ANNNavMesh::ConditionalConstructGenerator()

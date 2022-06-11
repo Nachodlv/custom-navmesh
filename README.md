@@ -33,7 +33,12 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
   - [X] Merge triangles to form convex polygons
 - [ ] Detail Mesh Generation
 - [ ] Implement pathfinding
+  - [X] Graph generation
+  - [X] A*
+  - [X] Implement simple point projection
+  - [ ] Implement path smoothing
 - [ ] Bake results
+- [ ] Combine multiple navmesh bounds
 
 ## Improves
 - [X] Refactor the distance field generation
@@ -41,3 +46,6 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
 - [ ] Profile
 - [X] Make navmesh generation asynchronous
 - [X] Rebuild only the dirty area and not all the navmesh
+- [ ] Store the polygons in an Octree
+- [ ] Find proper way to check nearest point to a 3D polygon
+- [ ] Convert debug macros to console variables for proper debugging

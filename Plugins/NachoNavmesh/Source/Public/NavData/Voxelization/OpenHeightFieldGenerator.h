@@ -83,6 +83,9 @@ struct FNNOpenHeightField
 	/** Transforms the vector in local OpenHeightField space to world space */
 	FVector TransformVectorToWorldPosition(const FVector& Vector) const;
 
+	/** Transforms the vector in world space to local OpenHeightField space */
+	FVector TransformToHeightFieldPosition(const FVector& Vector) const;
+
 private:
 	/** The maximum distance from an edge a Span has from the Spans array */
 	mutable int32 SpanMaxEdgeDistance = INDEX_NONE;
