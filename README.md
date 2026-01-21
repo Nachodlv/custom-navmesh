@@ -1,6 +1,8 @@
 ﻿# Custom Navmesh
 Custom implementation of a Navigation Mesh using Unreal Engine as editor
 
+### Showcase:
+[![Custom Navmesh in Unreal Engine on YouTube](http://img.youtube.com/vi/tQc5QeUWZQ0/0.jpg)](http://www.youtube.com/watch?v=tQc5QeUWZQ0 "Custom Navmesh in Unreal Engine")
 
 ## Setup (in progress)
 
@@ -49,3 +51,4 @@ Custom implementation of a Navigation Mesh using Unreal Engine as editor
 - [ ] Store the polygons in an Octree
 - [ ] Find proper way to check nearest point to a 3D polygon
 - [ ] Convert debug macros to console variables for proper debugging
+
